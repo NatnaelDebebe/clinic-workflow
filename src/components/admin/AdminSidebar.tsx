@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, Stethoscope, FlaskConical, UserSquare, NotebookPen, LogOut } from 'lucide-react';
+import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, FlaskConical, NotebookPen, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/data/users';
 import { useEffect, useState } from 'react';
@@ -17,14 +17,13 @@ const navItems = [
   { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] },
   { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] },
   { href: '/admin/schedule', icon: CalendarDays, label: 'Schedule', roles: ['receptionist', 'doctor'] },
-  { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor'] },
+  { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] }, // Added receptionist
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
   { href: '/admin/ai-tools', icon: UserSquare, label: 'AI Comms Tool', roles: ['receptionist'] },
   { href: '/admin/reports', icon: BarChart3, label: 'Reports', roles: ['admin'] },
   { href: '/admin/settings', icon: Settings, label: 'Settings', roles: ['admin'] },
 ];
 
-// Function to get initials from full name
 const getInitials = (name: string) => {
   if (!name) return 'U';
   const parts = name.split(' ');
@@ -35,9 +34,7 @@ const getInitials = (name: string) => {
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
-  const [currentUserName, setCurrentUserName] = useState<string>('User');
-  const [currentUserInitials, setCurrentUserInitials] = useState<string>('U');
+  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -47,15 +44,14 @@ export default function AdminSidebar() {
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
-          // To test receptionist flow for creating patients:
-          // Uncomment these lines to simulate receptionist login:
-          // if (userData.username === 'admin@clinic.com') { // Temp override for testing
-          //   userData.role = 'receptionist';
-          //   userData.fullName = 'Sarah Miller (Receptionist)';
-          // }
-          setCurrentUserRole(userData.role as UserRole);
-          setCurrentUserName(userData.fullName || 'User');
-          setCurrentUserInitials(getInitials(userData.fullName || 'User'));
+          // To test specific role flows more easily, you can temporarily override here:
+          // userData.role = 'receptionist'; // Example: Test as receptionist
+          // userData.fullName = 'Sarah Miller (Test)';
+          // userData.role = 'lab_tech'; // Example: Test as lab_tech
+          // userData.fullName = 'Mark Johnson (Test)';
+           userData.role = 'admin'; 
+           userData.fullName = 'Admin User (Test)';
+          setCurrentUser(userData);
         } catch (error) {
           console.error("Failed to parse user data from localStorage", error);
           localStorage.removeItem('loggedInUser');
@@ -74,7 +70,7 @@ export default function AdminSidebar() {
     router.push('/');
   };
   
-  if (!isClient) { // Show loading state until client is ready
+  if (!isClient) { 
     return (
       <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
         <div>Loading user...</div>
@@ -82,8 +78,7 @@ export default function AdminSidebar() {
     );
   }
   
-  if (!currentUserRole) { // If role is still null after client check (e.g. redirect happened)
-     // This case should ideally be handled by the redirect, but as a fallback:
+  if (!currentUser) {
     return (
          <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
             <div>Redirecting...</div>
@@ -91,28 +86,31 @@ export default function AdminSidebar() {
     );
   }
 
-
-  const accessibleNavItems = navItems.filter(item => currentUserRole && item.roles.includes(currentUserRole));
+  const accessibleNavItems = navItems.filter(item => currentUser && item.roles.includes(currentUser.role));
+  const userInitials = getInitials(currentUser.fullName);
 
   return (
     <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 p-2">
           <Avatar className="size-10">
-            <AvatarImage src={`https://placehold.co/40x40.png?text=${currentUserInitials}`} alt={currentUserName} data-ai-hint="avatar placeholder" />
-            <AvatarFallback>{currentUserInitials}</AvatarFallback>
+            <AvatarImage src={`https://placehold.co/40x40.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="avatar placeholder" />
+            <AvatarFallback>{userInitials}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <h1 className="text-foreground text-base font-medium leading-normal">{currentUserName}</h1>
+            <h1 className="text-foreground text-base font-medium leading-normal">{currentUser.fullName}</h1>
             <p className="text-muted-foreground text-sm font-normal leading-normal capitalize">
-              {currentUserRole.replace('_', ' ')}
+              {currentUser.role.replace('_', ' ')}
             </p>
           </div>
         </div>
         <nav className="flex flex-col gap-2 mt-4">
           {accessibleNavItems.map((item) => {
-            const isActive = (item.href === '/admin' && pathname === item.href) ||
-                             (item.href !== '/admin' && pathname.startsWith(item.href));
+            const isActive = (pathname === item.href) || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href.split('/').length === pathname.split('/').length) || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href.split('/').length < pathname.split('/').length && pathname.split('/')[2] === item.href.split('/')[2]);
+             if (item.href === '/admin' && pathname !== '/admin' && pathname.startsWith('/admin/')) {
+                // Special case for /admin dashboard link to not be active if on a sub-page
+             }
+
             return (
               <Link
                 key={item.label}
