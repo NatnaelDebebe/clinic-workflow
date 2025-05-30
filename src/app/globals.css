@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,7 +17,7 @@
     --primary: 205 43% 84%; /* #c0d9ec */
     --primary-foreground: 206 11% 8%; /* #121517 */
 
-    --secondary: 210 20% 92%; /* Adjust if needed, e.g. #e5e7eb for a slightly darker secondary */
+    --secondary: 210 20% 92%; /* #e5e7eb */
     --secondary-foreground: 206 11% 8%; /* #121517 */
 
     --muted: 210 20% 92%; /* #e5e7eb */
@@ -28,7 +29,7 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 220 13% 95%; /* #f1f2f4 general borders */
+    --border: 210 17% 90%; /* #dde1e4 - Changed to match common border color from HTML */
     --input: 210 17% 90%; /* #dde1e4 input borders */
     --ring: 205 43% 84%; /* primary color for focus rings #c0d9ec */
 
@@ -104,3 +105,4 @@
     @apply bg-background text-foreground;
   }
 }
+
