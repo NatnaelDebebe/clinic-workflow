@@ -23,7 +23,7 @@ import type { UserRole } from '@/lib/data/users';
 const PatientSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Full name is required"),
-  dob: z.string().min(1, "Date of Birth is required"), // Consider using a date picker and date validation
+  dob: z.string().min(1, "Date of Birth is required"), 
   gender: z.enum(['Male', 'Female', 'Other'], { errorMap: () => ({ message: "Gender is required" }) }),
   address: z.string().min(1, "Address is required"),
   phoneNumber: z.string().min(1, "Phone number is required").regex(/^\+?[0-9\s\-()]{7,20}$/, "Invalid phone number"),
@@ -39,8 +39,6 @@ export default function AdminPatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
-  // For this prototype, we'll assume 'editingPatient' functionality would be similar and focus on creation
-  // const [editingPatient, setEditingPatient] = useState<Patient | null>(null); 
   const { toast } = useToast();
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
 
@@ -87,7 +85,6 @@ export default function AdminPatientsPage() {
   }, [patients, searchTerm]);
 
   const openCreateForm = () => {
-    // setEditingPatient(null); 
     reset({ name: '', dob: '', gender: undefined, address: '', phoneNumber: '', email: '', emergencyContactName: '', emergencyContactPhone: '', status: 'Active' });
     setIsFormOpen(true);
   };
@@ -95,12 +92,15 @@ export default function AdminPatientsPage() {
   const onSubmit: SubmitHandler<PatientFormData> = (data) => {
     const newPatient: Patient = {
       ...data,
-      id: (Math.random() + 1).toString(36).substring(7), // simple unique ID
+      id: (Math.random() + 1).toString(36).substring(2), // simple unique ID
       registrationDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD
       email: data.email || undefined,
       emergencyContactName: data.emergencyContactName || undefined,
       emergencyContactPhone: data.emergencyContactPhone || undefined,
-      lastVisit: undefined, // New patients won't have a last visit yet
+      lastVisit: undefined, 
+      medicalHistory: [], // Initialize new fields
+      prescriptions: [],  // Initialize new fields
+      labRequests: [],    // Initialize new fields
     };
     const updatedPatients = [...patients, newPatient];
     setPatients(updatedPatients);
@@ -161,7 +161,7 @@ export default function AdminPatientsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" asChild>
-                    <Link href={`/admin/patients/${patient.id}`}> {/* Detail page not yet implemented */}
+                    <Link href={`/admin/patients/${patient.id}`}>
                       <Eye className="h-5 w-5 text-muted-foreground hover:text-accent" />
                       <span className="sr-only">View Patient</span>
                     </Link>
