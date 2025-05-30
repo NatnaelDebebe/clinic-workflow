@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, Stethoscope, FlaskConical, UserSquare } from 'lucide-react';
+import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, Stethoscope, FlaskConical, UserSquare, NotebookPen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -12,7 +12,7 @@ const navItems = [
   { href: '/admin/users', icon: Users, label: 'User Management', roles: ['admin'] },
   { href: '/admin/patients', icon: Users, label: 'Patients', roles: ['admin', 'receptionist', 'doctor'] },
   { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] },
-  { href: '/admin/my-appointments', icon: CalendarDays, label: 'My Appointments', roles: ['doctor'] },
+  { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] }, // Changed Icon
   { href: '/admin/schedule', icon: CalendarDays, label: 'Schedule', roles: ['receptionist', 'doctor'] },
   { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
@@ -22,9 +22,9 @@ const navItems = [
 ];
 
 // This would ideally come from an auth context
-const currentUserRole = 'admin'; // Example: 'admin', 'doctor', 'receptionist', 'lab_tech'
-const currentUserName = 'Clinic Admin'; // Placeholder, should be dynamic
-const currentUserInitials = 'CA'; // Placeholder
+const currentUserRole = 'receptionist'; // Example: 'admin', 'doctor', 'receptionist', 'lab_tech'
+const currentUserName = 'Sarah Miller'; // Placeholder, should be dynamic
+const currentUserInitials = 'SM'; // Placeholder
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -36,6 +36,7 @@ export default function AdminSidebar() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 p-2">
           <Avatar className="size-10">
+            {/* Placeholder image, update with actual user image if available */}
             <AvatarImage src="https://placehold.co/40x40.png" alt={currentUserName} data-ai-hint="avatar" />
             <AvatarFallback>{currentUserInitials}</AvatarFallback>
           </Avatar>
@@ -46,14 +47,17 @@ export default function AdminSidebar() {
         </div>
         <nav className="flex flex-col gap-2 mt-4">
           {accessibleNavItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
+            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href.split('/').length === pathname.split('/').length);
+            // Special handling for /admin exact match if other routes start with /admin/
+            const isDashboardActive = item.href === '/admin' && pathname === '/admin';
+
             return (
               <Link
                 key={item.label}
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted',
-                  isActive ? 'bg-muted text-foreground font-semibold' : 'text-foreground hover:text-foreground'
+                  (isActive || isDashboardActive) ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
                 )}
               >
                 <item.icon className="size-5" />
@@ -67,4 +71,3 @@ export default function AdminSidebar() {
     </aside>
   );
 }
-
