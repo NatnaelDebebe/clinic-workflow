@@ -41,37 +41,31 @@ export default function AdminSidebar() {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    setIsClient(true); // Component has mounted, localStorage is available
+    setIsClient(true); 
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
+          // To test receptionist flow for creating patients:
+          // Uncomment these lines to simulate receptionist login:
+          // if (userData.username === 'admin@clinic.com') { // Temp override for testing
+          //   userData.role = 'receptionist';
+          //   userData.fullName = 'Sarah Miller (Receptionist)';
+          // }
           setCurrentUserRole(userData.role as UserRole);
           setCurrentUserName(userData.fullName || 'User');
           setCurrentUserInitials(getInitials(userData.fullName || 'User'));
         } catch (error) {
           console.error("Failed to parse user data from localStorage", error);
-          // Fallback or redirect if data is corrupted
           localStorage.removeItem('loggedInUser');
-          router.push('/'); // Redirect to login
+          router.push('/'); 
         }
       } else {
-        // No logged-in user found, redirect to login
         router.push('/');
       }
     }
   }, [router]);
-
-  if (!isClient || !currentUserRole) {
-    // Show a loading state or null while waiting for client-side hydration and role check
-    // Or redirect immediately if preferred, but this avoids flash of content
-    return (
-      <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
-        <div>Loading...</div>
-      </aside>
-    );
-  }
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -79,6 +73,24 @@ export default function AdminSidebar() {
     }
     router.push('/');
   };
+  
+  if (!isClient) { // Show loading state until client is ready
+    return (
+      <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
+        <div>Loading user...</div>
+      </aside>
+    );
+  }
+  
+  if (!currentUserRole) { // If role is still null after client check (e.g. redirect happened)
+     // This case should ideally be handled by the redirect, but as a fallback:
+    return (
+         <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
+            <div>Redirecting...</div>
+        </aside>
+    );
+  }
+
 
   const accessibleNavItems = navItems.filter(item => currentUserRole && item.roles.includes(currentUserRole));
 
