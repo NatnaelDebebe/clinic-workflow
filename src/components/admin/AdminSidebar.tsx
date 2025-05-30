@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, FlaskConical, NotebookPen, LogOut, UserSquare } from 'lucide-react';
+import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, FlaskConical, NotebookPen, LogOut, UserSquare, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/data/users';
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] },
   { href: '/admin/schedule', icon: CalendarDays, label: 'Schedule', roles: ['receptionist', 'doctor'] },
   { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
+  { href: '/admin/manage-lab-tests', icon: ListChecks, label: 'Manage Lab Tests', roles: ['admin'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
   { href: '/admin/ai-tools', icon: UserSquare, label: 'AI Comms Tool', roles: ['receptionist'] },
   { href: '/admin/reports', icon: BarChart3, label: 'Reports', roles: ['admin'] },
@@ -44,7 +45,6 @@ export default function AdminSidebar() {
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
-          // Ensure no hardcoded role assignment here
           setCurrentUser(userData);
         } catch (error) {
           console.error("Failed to parse user data from localStorage", error);
@@ -55,7 +55,7 @@ export default function AdminSidebar() {
         router.push('/');
       }
     }
-  }, [router]); // Rerunning when router object changes, which might include route changes.
+  }, [router]);
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -73,8 +73,6 @@ export default function AdminSidebar() {
   }
   
   if (!currentUser) {
-    // This case handles when user data is not yet loaded or user is not logged in.
-    // It might briefly show before redirecting if not logged in.
     return (
          <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
             <div>Authenticating...</div>
@@ -90,7 +88,7 @@ export default function AdminSidebar() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 p-2">
           <Avatar className="size-10">
-            <AvatarImage src={`https://placehold.co/40x40.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="avatar placeholder" />
+            <AvatarImage src={`https://placehold.co/40x40.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="avatar placeholder"/>
             <AvatarFallback>{userInitials}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
@@ -102,10 +100,8 @@ export default function AdminSidebar() {
         </div>
         <nav className="flex flex-col gap-2 mt-4">
           {accessibleNavItems.map((item) => {
-            // More robust active link checking
             const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href + '/')) || (pathname.startsWith(item.href) && item.href !== '/admin' && !pathname.substring(item.href.length).includes('/'));
 
-            // Special case for /admin dashboard link to not be active if on a sub-page, unless it's exactly /admin
             let finalIsActive = isActive;
             if (item.href === '/admin' && pathname !== '/admin' && pathname.startsWith('/admin/')) {
               finalIsActive = false;
@@ -113,7 +109,6 @@ export default function AdminSidebar() {
              if (item.href === '/admin' && pathname === '/admin') {
                 finalIsActive = true;
             }
-
 
             return (
               <Link

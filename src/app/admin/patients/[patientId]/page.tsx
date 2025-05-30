@@ -16,20 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { getManagedPatients, saveManagedPatients, type Patient, type MedicalHistoryEntry, type Prescription, type PatientLabRequest } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
-// Removed: import { availableLabTests, type AvailableLabTest } from '@/lib/data/availableLabTests';
 import { useForm, type SubmitHandler, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Edit, PlusCircle, Trash2 } from 'lucide-react';
+import type { AdminLabTest } from '@/lib/data/labTests'; // Import AdminLabTest
 
-// Define AvailableLabTest type here or in a shared types file
-interface AvailableLabTest {
-  id: string;
-  test: string; // Corresponds to 'name' from API
-  price: number;
-}
-
-// Zod Schemas for forms
 const MedicalHistorySchema = z.object({
   id: z.string().optional(),
   date: z.string().min(1, "Date is required"),
@@ -47,12 +39,9 @@ const PrescriptionSchema = z.object({
 type PrescriptionFormData = z.infer<typeof PrescriptionSchema>;
 
 const LabRequestSchema = z.object({
-  testId: z.string().min(1, "Please select a lab test"), // This will be the generated ID
+  testId: z.string().min(1, "Please select a lab test"), 
 });
 type LabRequestFormData = z.infer<typeof LabRequestSchema>;
-
-// Function to generate a slug-like ID
-const slugify = (text: string) => text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
 
 
 export default function PatientDetailPage() {
@@ -71,7 +60,7 @@ export default function PatientDetailPage() {
   const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
 
   const [isLabRequestFormOpen, setIsLabRequestFormOpen] = useState(false);
-  const [availableTests, setAvailableTests] = useState<AvailableLabTest[]>([]);
+  const [availableTests, setAvailableTests] = useState<AdminLabTest[]>([]);
 
 
   const { register: registerHistory, handleSubmit: handleSubmitHistory, reset: resetHistory, setValue: setValueHistory, formState: { errors: errorsHistory } } = useForm<MedicalHistoryFormData>({
@@ -119,13 +108,8 @@ export default function PatientDetailPage() {
         if (!response.ok) {
           throw new Error('Failed to fetch lab tests');
         }
-        const testsFromApi: { test: string, price: number }[] = await response.json();
-        const processedTests: AvailableLabTest[] = testsFromApi.map(t => ({
-            id: slugify(t.test), // Use slugified name as ID
-            test: t.test,
-            price: t.price,
-        }));
-        setAvailableTests(processedTests);
+        const testsFromApi: AdminLabTest[] = await response.json();
+        setAvailableTests(testsFromApi);
       } catch (error) {
         console.error("Error fetching lab tests:", error);
         toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests." });
@@ -240,18 +224,18 @@ export default function PatientDetailPage() {
       return;
     }
     const newLabRequest: PatientLabRequest = {
-      id: (Math.random() + 1).toString(36).substring(2),
-      testId: selectedApiTest.id,
-      testName: selectedApiTest.test, // Use 'test' field from API data
+      id: (Math.random() + 1).toString(36).substring(2), // Unique ID for this request instance
+      testId: selectedApiTest.id, // ID from AdminLabTest
+      testName: selectedApiTest.name, // Name from AdminLabTest
       requestedDate: new Date().toISOString().split('T')[0],
-      status: 'Pending Payment', // Start as Pending Payment
+      status: 'Pending Payment', 
       requestedBy: currentUser.fullName,
-      priceAtTimeOfRequest: selectedApiTest.price, // Store price
-      patientName: patient.name, // Store patient name
+      priceAtTimeOfRequest: selectedApiTest.price,
+      patientName: patient.name, 
     };
     const updatedLabRequests = [...patient.labRequests, newLabRequest];
     updatePatientData({ ...patient, labRequests: updatedLabRequests });
-    toast({ title: "Lab Test Requested", description: `${selectedApiTest.test} has been requested.` });
+    toast({ title: "Lab Test Requested", description: `${selectedApiTest.name} has been requested.` });
     setIsLabRequestFormOpen(false);
   };
   
@@ -550,7 +534,7 @@ export default function PatientDetailPage() {
                     <SelectContent className="bg-popover text-popover-foreground">
                       {availableTests.map(test => (
                         <SelectItem key={test.id} value={test.id} className="hover:bg-accent focus:bg-accent">
-                          {test.test} {/* Show only test name to doctor */}
+                          {test.name} {/* Show only test name to doctor */}
                         </SelectItem>
                       ))}
                     </SelectContent>
