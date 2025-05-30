@@ -11,7 +11,7 @@ import { Eye, Search, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { getManagedPatients, saveManagedPatients, type Patient, type PatientLabRequest } from '@/lib/data/patients';
+import { getManagedPatients, saveManagedPatients, type PatientLabRequest } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
@@ -137,13 +137,22 @@ export default function AdminLabRequestsPage() {
              toast({ variant: "destructive", title: "Access Denied"});
              router.push('/admin');
            }
-          // Set initial tab based on role
+          
           if (userData.role === 'lab_tech') {
             setActiveTab('Pending');
           } else if (userData.role === 'receptionist') {
-            setActiveTab('Pending Payment');
+            const receptionistTabs = TABS.filter(tab => tab.roles.includes('receptionist'));
+             if (receptionistTabs.find(t => t.value === 'Pending Payment')) {
+                  setActiveTab('Pending Payment');
+             } else if (receptionistTabs.find(t => t.value === 'all')) {
+                  setActiveTab('all');
+             } else if (receptionistTabs.length > 0) {
+                 setActiveTab(receptionistTabs[0].value);
+             } else {
+                setActiveTab('all'); // Fallback
+             }
           } else {
-            setActiveTab('all');
+            setActiveTab('all'); // Default for admin/doctor
           }
 
         } catch (e) { console.error("Error parsing current user", e); router.push('/'); }
@@ -151,19 +160,27 @@ export default function AdminLabRequestsPage() {
         router.push('/');
       }
     }
-    loadLabRequests();
-  }, [router, toast]); // Removed loadLabRequests from dependency array initially
+    // loadLabRequests is called in the next useEffect, which depends on currentUser
+  }, [router, toast]); 
 
-  useEffect(() => { // Separate effect for loading requests when user changes
-    loadLabRequests();
+  useEffect(() => { 
+    if (currentUser) { // Ensure currentUser is loaded before loading requests
+      loadLabRequests();
+    }
   }, [currentUser]);
 
 
   const loadLabRequests = () => {
+    if (!currentUser) return; // Do not load if currentUser is not set
+
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
       patient.labRequests.forEach(req => {
+        // If current user is lab_tech, only add 'Pending' or 'Completed' requests
+        if (currentUser.role === 'lab_tech' && !(req.status === 'Pending' || req.status === 'Completed')) {
+          return; // Skip this request for lab_tech if not 'Pending' or 'Completed'
+        }
         requests.push({
           ...req,
           patientId: patient.id,
@@ -179,7 +196,9 @@ export default function AdminLabRequestsPage() {
   };
 
   const getFilteredRequestsForTab = (tabKey: PatientLabRequest['status'] | 'all') => {
-    let baseRequests = allLabRequests;
+    let baseRequests = allLabRequests; 
+    // For lab_tech, allLabRequests is already pre-filtered.
+    // For other roles, allLabRequests contains everything.
     if (tabKey !== 'all') {
       baseRequests = allLabRequests.filter(req => req.status === tabKey);
     }
@@ -206,11 +225,10 @@ export default function AdminLabRequestsPage() {
     patients[patientIndex] = patient;
     saveManagedPatients(patients);
     toast({ title: "Lab Test Completed", description: `${patient.labRequests[requestIndex].testName} marked as completed.` });
-    loadLabRequests(); // Refresh
+    loadLabRequests(); // Refresh the list
   };
 
   const handleViewDetails = (patientId: string, requestId: string) => {
-    // Navigation is handled by Link component, this can be for other logic if needed
     console.log("Viewing details for request:", requestId, "of patient:", patientId);
   };
   
@@ -275,3 +293,4 @@ export default function AdminLabRequestsPage() {
     </div>
   );
 }
+
