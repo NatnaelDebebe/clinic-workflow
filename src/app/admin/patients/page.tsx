@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, PlusCircle, Eye } from 'lucide-react';
 import Link from 'next/link';
+import { Card } from '@/components/ui/card'; // Import Card from ShadCN
 
 // Sample patient data
 const allPatients = [
@@ -102,11 +103,3 @@ export default function AdminPatientsPage() {
     </div>
   );
 }
-
-// Minimal Card component structure to wrap Table, if not already globally available or preferred
-// Remove this if you have a global Card component or prefer not to use it here.
-const Card = ({ className, children }: { className?: string, children: React.ReactNode }) => (
-  <div className={`rounded-xl border bg-card text-card-foreground shadow-sm ${className}`}>
-    {children}
-  </div>
-);

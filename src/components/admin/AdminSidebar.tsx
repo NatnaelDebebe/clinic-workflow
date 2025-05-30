@@ -22,9 +22,9 @@ const navItems = [
 ];
 
 // This would ideally come from an auth context
-const currentUserRole = 'lab_tech'; // Example: 'admin', 'doctor', 'receptionist', 'lab_tech'
-const currentUserName = 'Lab Personnel'; // Placeholder, should be dynamic
-const currentUserInitials = 'LP'; // Placeholder
+const currentUserRole = 'admin'; // Changed to 'admin' for full visibility
+const currentUserName = 'Admin User'; // Updated placeholder
+const currentUserInitials = 'AU'; // Updated placeholder
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -36,7 +36,6 @@ export default function AdminSidebar() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 p-2">
           <Avatar className="size-10">
-            {/* Placeholder image, update with actual user image if available */}
             <AvatarImage src="https://placehold.co/40x40.png" alt={currentUserName} data-ai-hint="avatar" />
             <AvatarFallback>{currentUserInitials}</AvatarFallback>
           </Avatar>
@@ -47,12 +46,10 @@ export default function AdminSidebar() {
         </div>
         <nav className="flex flex-col gap-2 mt-4">
           {accessibleNavItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
-            // Special handling for /admin exact match if other routes start with /admin/
-            const isDashboardActive = item.href === '/admin' && pathname === '/admin';
-            // More specific active state for nested routes like /admin/lab-requests/[id]
-            const isCurrentPageActive = item.href === '/admin/lab-requests' && pathname.startsWith('/admin/lab-requests');
-
+            // Simplified active state logic:
+            // Exact match for /admin, startsWith for others.
+            const isActive = (item.href === '/admin' && pathname === item.href) || 
+                             (item.href !== '/admin' && pathname.startsWith(item.href));
 
             return (
               <Link
@@ -60,7 +57,7 @@ export default function AdminSidebar() {
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted',
-                  (isActive || isDashboardActive || isCurrentPageActive) ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
+                  isActive ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
                 )}
               >
                 <item.icon className="size-5" />

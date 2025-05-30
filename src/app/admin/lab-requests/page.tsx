@@ -33,9 +33,9 @@ type LabRequest = {
 const getStatusVariant = (status: string) => {
   switch (status.toLowerCase()) {
     case 'pending':
-      return 'secondary'; // Or a yellow-like color
+      return 'secondary'; 
     case 'completed':
-      return 'default'; // Or a green-like color
+      return 'default'; 
     default:
       return 'outline';
   }
@@ -72,7 +72,6 @@ const LabRequestTable = ({ requests, onActionClick }: { requests: LabRequest[], 
             </TableCell>
             <TableCell className="text-right">
               <Button variant="ghost" size="icon" onClick={() => onActionClick(request.id)} asChild>
-                {/* Link to a detailed view page, e.g., /admin/lab-requests/[id] */}
                 <Link href={`/admin/lab-requests/${request.id}`}>
                   <Eye className="h-5 w-5 text-muted-foreground hover:text-accent" />
                   <span className="sr-only">View Details</span>
@@ -102,12 +101,8 @@ export default function AdminLabRequestsPage() {
 
   const filterRequests = (requests: LabRequest[]) => {
     let filtered = requests;
-    if (activeTab === "pending") {
-      filtered = filtered.filter(req => req.status.toLowerCase() === "pending");
-    } else if (activeTab === "completed") {
-      filtered = filtered.filter(req => req.status.toLowerCase() === "completed");
-    }
-
+    // This initial filter based on activeTab for the displayed data is handled by the TabsContent logic below.
+    // Here, we only apply the search term.
     if (!searchTerm) return filtered;
     return filtered.filter(req => 
       req.patientName.toLowerCase().includes(searchTerm) ||
@@ -116,22 +111,31 @@ export default function AdminLabRequestsPage() {
   };
 
   const handleViewRequest = (requestId: string) => {
-    // Placeholder for view action, e.g., navigate to request detail page
     console.log("View lab request:", requestId);
   };
+  
+  const getFilteredRequestsForTab = (tab: string) => {
+    let baseRequests: LabRequest[];
+    switch (tab) {
+      case 'pending':
+        baseRequests = allLabRequests.filter(req => req.status.toLowerCase() === 'pending');
+        break;
+      case 'completed':
+        baseRequests = allLabRequests.filter(req => req.status.toLowerCase() === 'completed');
+        break;
+      case 'all':
+      default:
+        baseRequests = allLabRequests;
+        break;
+    }
+    return filterRequests(baseRequests);
+  };
 
-  const displayedRequests = filterRequests(allLabRequests);
 
   return (
     <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8">
       <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <h1 className="text-foreground tracking-tight text-3xl font-bold font-headline">Lab Requests</h1>
-        {/* Add button for new lab request if needed, e.g., by doctors
-        <Button variant="outline">
-          <PlusCircle className="mr-2 h-4 w-4" />
-          New Lab Request
-        </Button> 
-        */}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
@@ -170,23 +174,15 @@ export default function AdminLabRequestsPage() {
         </div>
 
         <TabsContent value="all">
-          <LabRequestTable requests={filterRequests(allLabRequests.filter(req => activeTab === 'all'))} onActionClick={handleViewRequest} />
+          <LabRequestTable requests={getFilteredRequestsForTab('all')} onActionClick={handleViewRequest} />
         </TabsContent>
         <TabsContent value="pending">
-          <LabRequestTable requests={filterRequests(allLabRequests.filter(req => req.status.toLowerCase() === 'pending'))} onActionClick={handleViewRequest} />
+          <LabRequestTable requests={getFilteredRequestsForTab('pending')} onActionClick={handleViewRequest} />
         </TabsContent>
         <TabsContent value="completed">
-          <LabRequestTable requests={filterRequests(allLabRequests.filter(req => req.status.toLowerCase() === 'completed'))} onActionClick={handleViewRequest} />
+          <LabRequestTable requests={getFilteredRequestsForTab('completed')} onActionClick={handleViewRequest} />
         </TabsContent>
       </Tabs>
-       {/* This logic ensures the correct table content is shown based on the active tab and search term.
-           We need to call filterRequests again for each tab, but ensure the initial filtering for the tab's specific status
-           is done before applying the search term.
-        */}
-      {activeTab === 'all' && <LabRequestTable requests={filterRequests(allLabRequests)} onActionClick={handleViewRequest} />}
-      {activeTab === 'pending' && <LabRequestTable requests={filterRequests(allLabRequests.filter(req => req.status.toLowerCase() === 'pending'))} onActionClick={handleViewRequest} />}
-      {activeTab === 'completed' && <LabRequestTable requests={filterRequests(allLabRequests.filter(req => req.status.toLowerCase() === 'completed'))} onActionClick={handleViewRequest} />}
-
     </div>
   );
 }
