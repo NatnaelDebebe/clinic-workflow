@@ -25,6 +25,7 @@ export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string } | null>(null);
   const [labTestsCatalog, setLabTestsCatalog] = useState<AdminLabTest[]>([]);
 
+  // Effect for loading the current user
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
@@ -32,9 +33,6 @@ export default function AdminDashboardPage() {
         try {
           const userData = JSON.parse(storedUser);
           setCurrentUser(userData);
-          if (userData.role === 'admin' || userData.role === 'receptionist') {
-            fetchLabTestsCatalog();
-          }
         } catch (e) {
           console.error("Error parsing current user from localStorage on dashboard", e);
           toast({ variant: "destructive", title: "Authentication Error", description: "Please log in again." });
@@ -59,6 +57,14 @@ export default function AdminDashboardPage() {
       toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests catalog." });
     }
   };
+  
+  // Effect for fetching lab tests catalog when currentUser is loaded and role is admin/receptionist
+  useEffect(() => {
+    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
+      fetchLabTestsCatalog();
+    }
+  }, [currentUser]); // Runs when currentUser state changes
+
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
   const showLabTestCatalog = currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist') && labTestsCatalog.length > 0;
@@ -169,6 +175,7 @@ export default function AdminDashboardPage() {
              <Card className="flex items-center justify-center h-48"> 
                 <CardContent className="text-center text-muted-foreground py-10">
                   <p>Lab tests catalog is empty or loading...</p>
+                  {currentUser.role === 'admin' && <p className="text-sm">Go to "Manage Lab Tests" to add new tests.</p>}
                 </CardContent>
               </Card>
         )}
