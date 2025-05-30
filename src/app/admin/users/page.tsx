@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useForm, type SubmitHandler } from "react-hook-form";
+import { useForm, type SubmitHandler, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Search, UserPlus, Edit3, Trash2 } from 'lucide-react';
@@ -26,7 +26,7 @@ const userRoles: UserRole[] = ['admin', 'doctor', 'lab_tech', 'receptionist', 'p
 interface User {
   id: string;
   fullName: string;
-  username: string; 
+  username: string;
   role: UserRole;
   status: 'Active' | 'Inactive';
 }
@@ -62,14 +62,14 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<UserRole | 'all'>("all");
-  
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<UserFormData>({
+  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<UserFormData>({
     resolver: zodResolver(UserSchema),
   });
 
@@ -107,15 +107,15 @@ export default function AdminUsersPage() {
     setEditingUser(user);
     setIsFormOpen(true);
   };
-  
+
   const onSubmit: SubmitHandler<UserFormData> = (data) => {
     if (editingUser) {
       setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...data, id: u.id, status: u.status } : u));
       // In a real app, password update would be handled more securely
       console.log("Updated user:", { ...editingUser, ...data });
     } else {
-      const newUser: User = { 
-        ...data, 
+      const newUser: User = {
+        ...data,
         id: (Math.random() + 1).toString(36).substring(7), // simple id generation
         status: 'Active' // Default status
       };
@@ -150,7 +150,7 @@ export default function AdminUsersPage() {
       default: return 'secondary';
     }
   };
-  
+
   const getRoleBadgeClassName = (role: UserRole) => {
     switch (role) {
       case 'admin': return 'bg-red-500/20 text-red-700';
@@ -334,8 +334,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-
-// Helper to get Controller from react-hook-form if not already imported for Select
-import { Controller, useFormContext as useFormContextInternal } from "react-hook-form";
-
-```
