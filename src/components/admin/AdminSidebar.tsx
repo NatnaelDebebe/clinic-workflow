@@ -12,7 +12,7 @@ const navItems = [
   { href: '/admin/users', icon: Users, label: 'User Management', roles: ['admin'] },
   { href: '/admin/patients', icon: Users, label: 'Patients', roles: ['admin', 'receptionist', 'doctor'] },
   { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] },
-  { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] }, // Changed Icon
+  { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] }, 
   { href: '/admin/schedule', icon: CalendarDays, label: 'Schedule', roles: ['receptionist', 'doctor'] },
   { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
@@ -22,9 +22,9 @@ const navItems = [
 ];
 
 // This would ideally come from an auth context
-const currentUserRole = 'receptionist'; // Example: 'admin', 'doctor', 'receptionist', 'lab_tech'
-const currentUserName = 'Sarah Miller'; // Placeholder, should be dynamic
-const currentUserInitials = 'SM'; // Placeholder
+const currentUserRole = 'lab_tech'; // Example: 'admin', 'doctor', 'receptionist', 'lab_tech'
+const currentUserName = 'Lab Personnel'; // Placeholder, should be dynamic
+const currentUserInitials = 'LP'; // Placeholder
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -47,9 +47,12 @@ export default function AdminSidebar() {
         </div>
         <nav className="flex flex-col gap-2 mt-4">
           {accessibleNavItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href.split('/').length === pathname.split('/').length);
+            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
             // Special handling for /admin exact match if other routes start with /admin/
             const isDashboardActive = item.href === '/admin' && pathname === '/admin';
+            // More specific active state for nested routes like /admin/lab-requests/[id]
+            const isCurrentPageActive = item.href === '/admin/lab-requests' && pathname.startsWith('/admin/lab-requests');
+
 
             return (
               <Link
@@ -57,7 +60,7 @@ export default function AdminSidebar() {
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted',
-                  (isActive || isDashboardActive) ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
+                  (isActive || isDashboardActive || isCurrentPageActive) ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
                 )}
               >
                 <item.icon className="size-5" />
