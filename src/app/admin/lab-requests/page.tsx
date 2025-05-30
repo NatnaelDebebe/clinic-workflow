@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getManagedPatients, saveManagedPatients, type PatientLabRequest } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
+import { userRoles as validUserRoles } from '@/lib/data/users'; // Import validUserRoles
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import type { AdminLabTest } from '@/lib/data/labTests';
@@ -22,14 +23,22 @@ interface LabRequestWithPatientInfo extends PatientLabRequest {
   patientName: string;
 }
 
+const TABS_CONFIG: Array<{value: PatientLabRequest['status'] | 'all', label: string, roles: UserRole[]}> = [
+  { value: 'all', label: 'All', roles: ['admin', 'doctor', 'receptionist'] },
+  { value: 'Pending Payment', label: 'Pending Payment', roles: ['admin', 'receptionist', 'doctor'] },
+  { value: 'Pending', label: 'Pending Processing', roles: ['admin', 'lab_tech', 'doctor'] },
+  { value: 'Completed', label: 'Completed', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
+  { value: 'Cancelled', label: 'Cancelled', roles: ['admin', 'doctor', 'receptionist'] },
+];
+
 const getStatusVariant = (status: string) => {
   switch (status.toLowerCase()) {
     case 'pending payment':
-      return 'secondary'; // Yellowish
-    case 'pending': // Pending processing
-      return 'default'; // Bluish/Primary
+      return 'secondary'; 
+    case 'pending': 
+      return 'default'; 
     case 'completed':
-      return 'outline'; // Greenish/Success
+      return 'outline'; 
     case 'cancelled':
         return 'destructive';
     default:
@@ -41,7 +50,7 @@ const getStatusClassName = (status: string) => {
     switch (status.toLowerCase()) {
         case 'pending payment':
             return 'bg-yellow-500/20 text-yellow-700';
-        case 'pending': // Pending processing
+        case 'pending': 
             return 'bg-blue-500/20 text-blue-700';
         case 'completed':
             return 'bg-green-500/20 text-green-700';
@@ -133,17 +142,25 @@ export default function AdminLabRequestsPage() {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser);
+          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string };
+          
+          if (!userData || !userData.role || !validUserRoles.includes(userData.role)) {
+            toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data." });
+            router.push('/');
+            return;
+          }
           setCurrentUser(userData);
+
            if (!['admin', 'doctor', 'lab_tech', 'receptionist'].includes(userData.role)) {
-             toast({ variant: "destructive", title: "Access Denied"});
+             toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
              router.push('/admin');
+             return;
            }
           
           if (userData.role === 'lab_tech') {
             setActiveTab('Pending');
           } else if (userData.role === 'receptionist') {
-            const receptionistTabs = TABS.filter(tab => tab.roles.includes('receptionist'));
+            const receptionistTabs = TABS_CONFIG.filter(tab => tab.roles.includes('receptionist'));
              if (receptionistTabs.find(t => t.value === 'Pending Payment')) {
                   setActiveTab('Pending Payment');
              } else if (receptionistTabs.find(t => t.value === 'all')) {
@@ -157,9 +174,14 @@ export default function AdminLabRequestsPage() {
             setActiveTab('all'); // Default for admin/doctor
           }
 
-        } catch (e) { console.error("Error parsing current user", e); router.push('/'); }
+        } catch (e) { 
+            console.error("Error parsing current user from localStorage on /admin/lab-requests", e); 
+            router.push('/'); 
+            return;
+        }
       } else {
         router.push('/');
+        return;
       }
     }
   }, [router, toast]); 
@@ -171,7 +193,7 @@ export default function AdminLabRequestsPage() {
         fetchDisplayableLabTests();
       }
     }
-  }, [currentUser]);
+  }, [currentUser, toast]);
 
 
   const loadLabRequests = () => {
@@ -181,6 +203,7 @@ export default function AdminLabRequestsPage() {
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
       patient.labRequests.forEach(req => {
+        // Stricter filter for lab_tech: only show 'Pending' or 'Completed'
         if (currentUser.role === 'lab_tech' && !(req.status === 'Pending' || req.status === 'Completed')) {
           return; 
         }
@@ -231,11 +254,17 @@ export default function AdminLabRequestsPage() {
 
     const patients = getManagedPatients();
     const patientIndex = patients.findIndex(p => p.id === patientId);
-    if (patientIndex === -1) return;
+    if (patientIndex === -1) {
+        toast({ variant: "destructive", title: "Error", description: "Patient not found." });
+        return;
+    }
 
     const patient = patients[patientIndex];
     const requestIndex = patient.labRequests.findIndex(req => req.id === requestId);
-    if (requestIndex === -1) return;
+    if (requestIndex === -1) {
+        toast({ variant: "destructive", title: "Error", description: "Lab request not found." });
+        return;
+    }
     
     patient.labRequests[requestIndex].status = 'Completed';
     patients[patientIndex] = patient;
@@ -248,19 +277,15 @@ export default function AdminLabRequestsPage() {
     // Intentionally left for navigation via Link component
   };
   
+  const availableTabs = useMemo(() => {
+    if (!currentUser) return [];
+    return TABS_CONFIG.filter(tab => tab.roles.includes(currentUser.role));
+  }, [currentUser]);
+
   if (!currentUser) {
     return <div className="flex flex-1 justify-center items-center p-8">Loading or unauthorized...</div>;
   }
 
-  const TABS: Array<{value: PatientLabRequest['status'] | 'all', label: string, roles: UserRole[]}> = [
-    { value: 'all', label: 'All', roles: ['admin', 'doctor', 'receptionist'] },
-    { value: 'Pending Payment', label: 'Pending Payment', roles: ['admin', 'receptionist', 'doctor'] },
-    { value: 'Pending', label: 'Pending Processing', roles: ['admin', 'lab_tech', 'doctor'] },
-    { value: 'Completed', label: 'Completed', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
-    { value: 'Cancelled', label: 'Cancelled', roles: ['admin', 'doctor', 'receptionist'] },
-  ];
-
-  const availableTabs = TABS.filter(tab => tab.roles.includes(currentUser.role));
   const showCatalog = currentUser.role === 'receptionist' || currentUser.role === 'admin';
 
   return (
@@ -340,7 +365,7 @@ export default function AdminLabRequestsPage() {
               </Card>
             )}
             {displayableLabTests.length === 0 && (
-               <Card className="flex items-center justify-center h-48"> {/* Give some min height */}
+               <Card className="flex items-center justify-center h-48"> 
                 <CardContent className="text-center text-muted-foreground py-10">
                   <p>Lab tests catalog is empty or loading...</p>
                 </CardContent>
@@ -352,3 +377,4 @@ export default function AdminLabRequestsPage() {
     </div>
   );
 }
+
