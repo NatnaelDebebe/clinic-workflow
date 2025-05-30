@@ -25,7 +25,6 @@ export default function AdminDashboardPage() {
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string } | null>(null);
   const [labTestsCatalog, setLabTestsCatalog] = useState<AdminLabTest[]>([]);
 
-  // Effect for loading the current user
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
@@ -46,10 +45,11 @@ export default function AdminDashboardPage() {
 
   const fetchLabTestsCatalog = async () => {
     try {
-      // Add cache: 'no-store' to ensure fresh data is fetched
       const response = await fetch('/api/lab-tests', { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error('Failed to fetch lab tests catalog');
+        console.error("Failed to fetch lab tests catalog, status:", response.status);
+        toast({ variant: "destructive", title: "Error", description: `Could not load lab tests catalog. Status: ${response.status}` });
+        return;
       }
       const tests: AdminLabTest[] = await response.json();
       setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
@@ -58,17 +58,15 @@ export default function AdminDashboardPage() {
       toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests catalog." });
     }
   };
-  
-  // Effect for fetching lab tests catalog when currentUser is loaded and role is admin/receptionist
+
   useEffect(() => {
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
       fetchLabTestsCatalog();
     }
-  }, [currentUser]); // Dependency array changed to [currentUser]
-
+  }, [currentUser]);
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
-  const showLabTestCatalog = currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist') && labTestsCatalog.length > 0;
+  const showLabTestCatalog = currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist');
 
 
   return (
@@ -151,7 +149,7 @@ export default function AdminDashboardPage() {
               <CardTitle className="text-xl font-bold font-headline">Available Lab Tests &amp; Prices</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[300px] overflow-y-auto"> {/* Adjust max-h as needed */}
+              <div className="max-h-[300px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -168,20 +166,17 @@ export default function AdminDashboardPage() {
                     ))}
                   </TableBody>
                 </Table>
+                {labTestsCatalog.length === 0 && (
+                     <div className="text-center py-10 text-muted-foreground">
+                        No lab tests found in the catalog.
+                        {currentUser?.role === 'admin' && <p className="text-sm">Go to "Manage Lab Tests" to add new tests.</p>}
+                     </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        )}
-         {currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist') && labTestsCatalog.length === 0 && (
-             <Card className="flex items-center justify-center h-48"> 
-                <CardContent className="text-center text-muted-foreground py-10">
-                  <p>Lab tests catalog is empty or loading...</p>
-                  {currentUser.role === 'admin' && <p className="text-sm">Go to "Manage Lab Tests" to add new tests.</p>}
-                </CardContent>
-              </Card>
         )}
       </div>
     </div>
   );
 }
-
