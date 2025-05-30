@@ -160,26 +160,24 @@ export default function AdminLabRequestsPage() {
         router.push('/');
       }
     }
-    // loadLabRequests is called in the next useEffect, which depends on currentUser
   }, [router, toast]); 
 
   useEffect(() => { 
-    if (currentUser) { // Ensure currentUser is loaded before loading requests
+    if (currentUser) { 
       loadLabRequests();
     }
   }, [currentUser]);
 
 
   const loadLabRequests = () => {
-    if (!currentUser) return; // Do not load if currentUser is not set
+    if (!currentUser) return; 
 
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
       patient.labRequests.forEach(req => {
-        // If current user is lab_tech, only add 'Pending' or 'Completed' requests
         if (currentUser.role === 'lab_tech' && !(req.status === 'Pending' || req.status === 'Completed')) {
-          return; // Skip this request for lab_tech if not 'Pending' or 'Completed'
+          return; 
         }
         requests.push({
           ...req,
@@ -197,8 +195,7 @@ export default function AdminLabRequestsPage() {
 
   const getFilteredRequestsForTab = (tabKey: PatientLabRequest['status'] | 'all') => {
     let baseRequests = allLabRequests; 
-    // For lab_tech, allLabRequests is already pre-filtered.
-    // For other roles, allLabRequests contains everything.
+    
     if (tabKey !== 'all') {
       baseRequests = allLabRequests.filter(req => req.status === tabKey);
     }
@@ -225,7 +222,7 @@ export default function AdminLabRequestsPage() {
     patients[patientIndex] = patient;
     saveManagedPatients(patients);
     toast({ title: "Lab Test Completed", description: `${patient.labRequests[requestIndex].testName} marked as completed.` });
-    loadLabRequests(); // Refresh the list
+    loadLabRequests(); 
   };
 
   const handleViewDetails = (patientId: string, requestId: string) => {
@@ -294,3 +291,4 @@ export default function AdminLabRequestsPage() {
   );
 }
 
+    
