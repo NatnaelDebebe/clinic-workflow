@@ -171,7 +171,7 @@ export default function AdminLabRequestsPage() {
         fetchDisplayableLabTests();
       }
     }
-  }, [currentUser, toast]);
+  }, [currentUser]);
 
 
   const loadLabRequests = () => {
@@ -245,7 +245,7 @@ export default function AdminLabRequestsPage() {
   };
 
   const handleViewDetails = (patientId: string, requestId: string) => {
-    console.log("Viewing details for request:", requestId, "of patient:", patientId);
+    // Intentionally left for navigation via Link component
   };
   
   if (!currentUser) {
@@ -261,7 +261,7 @@ export default function AdminLabRequestsPage() {
   ];
 
   const availableTabs = TABS.filter(tab => tab.roles.includes(currentUser.role));
-
+  const showCatalog = currentUser.role === 'receptionist' || currentUser.role === 'admin';
 
   return (
     <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8 space-y-6">
@@ -269,75 +269,86 @@ export default function AdminLabRequestsPage() {
         <h1 className="text-foreground tracking-tight text-3xl font-bold font-headline">Lab Requests</h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PatientLabRequest['status'] | 'all')} className="mb-6">
-        <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
-          {availableTabs.map(tab => (
-            <TabsTrigger 
-              key={tab.value}
-              value={tab.value} 
-              className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
-            >
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        
-        <div className="mt-6 mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search by patient name or test type..."
-              className="pl-10 h-12 rounded-xl border-input bg-card placeholder:text-muted-foreground"
-              value={searchTerm}
-              onChange={handleSearchChange}
-            />
-          </div>
+      <div className={`grid ${showCatalog ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-6`}>
+        <div className={showCatalog ? 'lg:col-span-2' : 'lg:col-span-1'}>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PatientLabRequest['status'] | 'all')} className="w-full">
+            <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
+              {availableTabs.map(tab => (
+                <TabsTrigger 
+                  key={tab.value}
+                  value={tab.value} 
+                  className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
+                >
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            
+            <div className="mt-6 mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search by patient name or test type..."
+                  className="pl-10 h-12 rounded-xl border-input bg-card placeholder:text-muted-foreground"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                />
+              </div>
+            </div>
+
+            {availableTabs.map(tab => (
+              <TabsContent key={tab.value} value={tab.value}>
+                <LabRequestTable 
+                  requests={getFilteredRequestsForTab(tab.value)} 
+                  currentUserRole={currentUser.role}
+                  onMarkCompleted={handleMarkCompleted}
+                  onViewDetails={handleViewDetails}
+                />
+              </TabsContent>
+            ))}
+          </Tabs>
         </div>
 
-        {availableTabs.map(tab => (
-          <TabsContent key={tab.value} value={tab.value}>
-            <LabRequestTable 
-              requests={getFilteredRequestsForTab(tab.value)} 
-              currentUserRole={currentUser.role}
-              onMarkCompleted={handleMarkCompleted}
-              onViewDetails={handleViewDetails}
-            />
-          </TabsContent>
-        ))}
-      </Tabs>
-
-      {(currentUser.role === 'receptionist' || currentUser.role === 'admin') && displayableLabTests.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl font-bold font-headline">Available Lab Tests & Prices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-96 overflow-y-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-foreground font-medium">Test Name</TableHead>
-                    <TableHead className="text-foreground font-medium text-right">Price</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {displayableLabTests.map((test) => (
-                    <TableRow key={test.id}>
-                      <TableCell className="font-medium text-foreground">{test.name}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">${test.price.toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        {showCatalog && (
+          <div className="lg:col-span-1">
+            {displayableLabTests.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold font-headline">Available Lab Tests &amp; Prices</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-[calc(100vh-22rem)] overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-foreground font-medium">Test Name</TableHead>
+                          <TableHead className="text-foreground font-medium text-right">Price</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {displayableLabTests.map((test) => (
+                          <TableRow key={test.id}>
+                            <TableCell className="font-medium text-foreground">{test.name}</TableCell>
+                            <TableCell className="text-muted-foreground text-right">${test.price.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {displayableLabTests.length === 0 && (
+               <Card className="flex items-center justify-center h-48"> {/* Give some min height */}
+                <CardContent className="text-center text-muted-foreground py-10">
+                  <p>Lab tests catalog is empty or loading...</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-    
-
-      
