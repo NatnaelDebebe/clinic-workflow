@@ -9,14 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eye, Search, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getManagedPatients, saveManagedPatients, type PatientLabRequest } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
-import { userRoles as validUserRoles } from '@/lib/data/users'; // Import validUserRoles
+import { userRoles as validUserRoles } from '@/lib/data/users'; 
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
-import type { AdminLabTest } from '@/lib/data/labTests';
 
 interface LabRequestWithPatientInfo extends PatientLabRequest {
   patientId: string;
@@ -135,7 +134,6 @@ export default function AdminLabRequestsPage() {
   const [activeTab, setActiveTab] = useState<PatientLabRequest['status'] | 'all'>("all");
   const [searchTerm, setSearchTerm] = useState('');
   const [allLabRequests, setAllLabRequests] = useState<LabRequestWithPatientInfo[]>([]);
-  const [displayableLabTests, setDisplayableLabTests] = useState<AdminLabTest[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -189,11 +187,8 @@ export default function AdminLabRequestsPage() {
   useEffect(() => { 
     if (currentUser) { 
       loadLabRequests();
-      if (currentUser.role === 'receptionist' || currentUser.role === 'admin') {
-        fetchDisplayableLabTests();
-      }
     }
-  }, [currentUser, toast]);
+  }, [currentUser]);
 
 
   const loadLabRequests = () => {
@@ -203,7 +198,6 @@ export default function AdminLabRequestsPage() {
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
       patient.labRequests.forEach(req => {
-        // Stricter filter for lab_tech: only show 'Pending' or 'Completed'
         if (currentUser.role === 'lab_tech' && !(req.status === 'Pending' || req.status === 'Completed')) {
           return; 
         }
@@ -215,20 +209,6 @@ export default function AdminLabRequestsPage() {
       });
     });
     setAllLabRequests(requests.sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()));
-  };
-
-  const fetchDisplayableLabTests = async () => {
-    try {
-      const response = await fetch('/api/lab-tests');
-      if (!response.ok) {
-        throw new Error('Failed to fetch lab tests catalog');
-      }
-      const tests: AdminLabTest[] = await response.json();
-      setDisplayableLabTests(tests.sort((a,b) => a.name.localeCompare(b.name)));
-    } catch (error) {
-      console.error("Error fetching lab tests catalog:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests catalog." });
-    }
   };
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -286,16 +266,13 @@ export default function AdminLabRequestsPage() {
     return <div className="flex flex-1 justify-center items-center p-8">Loading or unauthorized...</div>;
   }
 
-  const showCatalog = currentUser.role === 'receptionist' || currentUser.role === 'admin';
-
   return (
     <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8 space-y-6">
       <div className="flex flex-wrap justify-between items-center gap-3">
         <h1 className="text-foreground tracking-tight text-3xl font-bold font-headline">Lab Requests</h1>
       </div>
 
-      <div className={`grid ${showCatalog ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-6`}>
-        <div className={showCatalog ? 'lg:col-span-2' : 'lg:col-span-1'}>
+      <div className="lg:col-span-1">
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PatientLabRequest['status'] | 'all')} className="w-full">
             <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
               {availableTabs.map(tab => (
@@ -334,47 +311,6 @@ export default function AdminLabRequestsPage() {
             ))}
           </Tabs>
         </div>
-
-        {showCatalog && (
-          <div className="lg:col-span-1">
-            {displayableLabTests.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold font-headline">Available Lab Tests &amp; Prices</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-h-[calc(100vh-22rem)] overflow-y-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-foreground font-medium">Test Name</TableHead>
-                          <TableHead className="text-foreground font-medium text-right">Price</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {displayableLabTests.map((test) => (
-                          <TableRow key={test.id}>
-                            <TableCell className="font-medium text-foreground">{test.name}</TableCell>
-                            <TableCell className="text-muted-foreground text-right">${test.price.toFixed(2)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-            {displayableLabTests.length === 0 && (
-               <Card className="flex items-center justify-center h-48"> 
-                <CardContent className="text-center text-muted-foreground py-10">
-                  <p>Lab tests catalog is empty or loading...</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
-
