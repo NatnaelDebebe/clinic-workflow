@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
-import { initialUsers, type User } from '@/lib/data/users';
+import { getManagedUsers, type User } from '@/lib/data/users'; // Updated import
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +16,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already logged in (basic check)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const loggedInUser = localStorage.getItem('loggedInUser');
@@ -31,9 +30,10 @@ export default function LoginPage() {
     event.preventDefault();
     setIsLoading(true);
 
-    const user = initialUsers.find(u => u.username === email && u.status === 'Active');
+    const currentUsers = getManagedUsers(); // Load users from localStorage
+    const user = currentUsers.find(u => u.username === email && u.status === 'Active');
 
-    if (user && user.password === password) { // Insecure: direct password comparison
+    if (user && user.password === password) { 
       if (typeof window !== 'undefined') {
         localStorage.setItem('loggedInUser', JSON.stringify({
           fullName: user.fullName,

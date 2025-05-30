@@ -18,8 +18,8 @@ import { z } from "zod";
 import { Search, UserPlus, Edit3, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { User, UserRole } from '@/lib/data/users'; // Import User and UserRole
-import { initialUsers, userRoles } from '@/lib/data/users'; // Import initialUsers and userRoles
+import type { User, UserRole } from '@/lib/data/users'; 
+import { userRoles, getManagedUsers, saveManagedUsers } from '@/lib/data/users'; 
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -28,24 +28,22 @@ const UserSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
   username: z.string().email("Invalid email address").min(1, "Username/Email is required"),
   role: z.enum(userRoles, { errorMap: () => ({ message: "Role is required" }) }),
-  password: z.string().optional(), // Optional for editing, required for creation if not already set
+  password: z.string().optional(), 
   confirmPassword: z.string().optional(),
 }).refine(data => {
-  // If it's a new user (no id) or if a password is provided for an existing user, then password is required
   if (!data.id || data.password) {
     return !!data.password && data.password.length >= 6;
   }
-  return true; // Password not required/being changed
+  return true; 
 }, {
   message: "Password must be at least 6 characters",
   path: ["password"],
 })
 .refine(data => {
-  // If password is provided, confirmPassword must match
   if (data.password) {
     return data.password === data.confirmPassword;
   }
-  return true; // No password change, so no need to match
+  return true; 
 }, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -55,7 +53,7 @@ const UserSchema = z.object({
 type UserFormData = z.infer<typeof UserSchema>;
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<UserRole | 'all'>("all");
 
@@ -66,7 +64,7 @@ export default function AdminUsersPage() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const { toast } = useToast();
 
-  const { register, handleSubmit, reset, setValue, control, formState: { errors }, watch } = useForm<UserFormData>({
+  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<UserFormData>({
     resolver: zodResolver(UserSchema),
     defaultValues: {
         fullName: '',
@@ -78,12 +76,16 @@ export default function AdminUsersPage() {
   });
 
   useEffect(() => {
+    setUsers(getManagedUsers());
+  }, []);
+
+  useEffect(() => {
     if (editingUser) {
       setValue("id", editingUser.id);
       setValue("fullName", editingUser.fullName);
       setValue("username", editingUser.username);
       setValue("role", editingUser.role);
-      setValue("password", ""); // Clear password fields for editing
+      setValue("password", ""); 
       setValue("confirmPassword", "");
     } else {
       reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
@@ -104,7 +106,6 @@ export default function AdminUsersPage() {
 
   const openCreateForm = () => {
     setEditingUser(null);
-    // reset form with specific undefined for optional fields to clear them
     reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
     setIsFormOpen(true);
   };
@@ -115,25 +116,26 @@ export default function AdminUsersPage() {
   };
 
  const onSubmit: SubmitHandler<UserFormData> = (data) => {
+    let updatedUsers;
     if (editingUser) {
-      // Update existing user
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...data, password: data.password || u.password } : u));
+      updatedUsers = users.map(u => u.id === editingUser.id ? { ...u, ...data, password: data.password || u.password } : u);
       toast({ title: "User Updated", description: `${data.fullName} has been updated.` });
     } else {
-      // Create new user
-      if (!data.password) { // Should be caught by validation, but good to double check
+      if (!data.password) { 
         toast({ variant: "destructive", title: "Error", description: "Password is required for new users." });
         return;
       }
       const newUser: User = {
         ...data,
-        id: (Math.random() + 1).toString(36).substring(7), // simple id generation
-        status: 'Active', // Default status
-        password: data.password, // Explicitly set password
+        id: (Math.random() + 1).toString(36).substring(7), 
+        status: 'Active', 
+        password: data.password, 
       };
-      setUsers([...users, newUser]);
+      updatedUsers = [...users, newUser];
       toast({ title: "User Created", description: `${newUser.fullName} has been added.` });
     }
+    setUsers(updatedUsers);
+    saveManagedUsers(updatedUsers);
     setIsFormOpen(false);
     reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
   };
@@ -146,7 +148,9 @@ export default function AdminUsersPage() {
 
   const confirmDelete = () => {
     if (userToDelete) {
-      setUsers(users.filter(u => u.id !== userToDelete.id));
+      const updatedUsers = users.filter(u => u.id !== userToDelete.id);
+      setUsers(updatedUsers);
+      saveManagedUsers(updatedUsers);
       toast({ title: "User Deleted", description: `${userToDelete.fullName} has been deleted.` });
     }
     setIsDeleteDialogOpen(false);
@@ -265,8 +269,8 @@ export default function AdminUsersPage() {
       <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
         setIsFormOpen(isOpen);
         if (!isOpen) {
-          setEditingUser(null); // Clear editing user when dialog closes
-          reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' }); // Reset form
+          setEditingUser(null); 
+          reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' }); 
         }
       }}>
         <DialogContent className="sm:max-w-[425px] bg-card">

@@ -27,3 +27,31 @@ export const initialUsers: User[] = [
   { id: 'user009', fullName: 'Noah Foster', username: 'noah.foster@example.com', password: 'password123', role: 'patient', status: 'Inactive' },
   { id: 'user010', fullName: 'Ava Mitchell', username: 'ava.mitchell@example.com', password: 'password123', role: 'patient', status: 'Active' },
 ];
+
+const MANAGED_USERS_STORAGE_KEY = 'managedUsers';
+
+export function getManagedUsers(): User[] {
+  if (typeof window !== 'undefined') {
+    const storedUsers = localStorage.getItem(MANAGED_USERS_STORAGE_KEY);
+    if (storedUsers) {
+      try {
+        return JSON.parse(storedUsers);
+      } catch (e) {
+        console.error("Error parsing managed users from localStorage", e);
+        // Fallback to initialUsers if parsing fails
+        localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(initialUsers));
+        return initialUsers;
+      }
+    } else {
+      localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(initialUsers));
+      return initialUsers;
+    }
+  }
+  return initialUsers; // Fallback for SSR or environments without localStorage
+}
+
+export function saveManagedUsers(users: User[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(users));
+  }
+}
