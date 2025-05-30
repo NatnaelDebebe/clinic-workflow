@@ -17,7 +17,7 @@ const navItems = [
   { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] },
   { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] },
   { href: '/admin/schedule', icon: CalendarDays, label: 'Schedule', roles: ['receptionist', 'doctor'] },
-  { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] }, // Added receptionist
+  { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
   { href: '/admin/ai-tools', icon: UserSquare, label: 'AI Comms Tool', roles: ['receptionist'] },
   { href: '/admin/reports', icon: BarChart3, label: 'Reports', roles: ['admin'] },
@@ -44,13 +44,7 @@ export default function AdminSidebar() {
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
-          // To test specific role flows more easily, you can temporarily override here:
-          // userData.role = 'receptionist'; // Example: Test as receptionist
-          // userData.fullName = 'Sarah Miller (Test)';
-          // userData.role = 'lab_tech'; // Example: Test as lab_tech
-          // userData.fullName = 'Mark Johnson (Test)';
-           userData.role = 'admin'; 
-           userData.fullName = 'Admin User (Test)';
+          // Ensure no hardcoded role assignment here
           setCurrentUser(userData);
         } catch (error) {
           console.error("Failed to parse user data from localStorage", error);
@@ -61,7 +55,7 @@ export default function AdminSidebar() {
         router.push('/');
       }
     }
-  }, [router]);
+  }, [router]); // Rerunning when router object changes, which might include route changes.
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -79,9 +73,11 @@ export default function AdminSidebar() {
   }
   
   if (!currentUser) {
+    // This case handles when user data is not yet loaded or user is not logged in.
+    // It might briefly show before redirecting if not logged in.
     return (
          <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
-            <div>Redirecting...</div>
+            <div>Authenticating...</div>
         </aside>
     );
   }
@@ -106,10 +102,18 @@ export default function AdminSidebar() {
         </div>
         <nav className="flex flex-col gap-2 mt-4">
           {accessibleNavItems.map((item) => {
-            const isActive = (pathname === item.href) || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href.split('/').length === pathname.split('/').length) || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href.split('/').length < pathname.split('/').length && pathname.split('/')[2] === item.href.split('/')[2]);
-             if (item.href === '/admin' && pathname !== '/admin' && pathname.startsWith('/admin/')) {
-                // Special case for /admin dashboard link to not be active if on a sub-page
-             }
+            // More robust active link checking
+            const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href + '/')) || (pathname.startsWith(item.href) && item.href !== '/admin' && !pathname.substring(item.href.length).includes('/'));
+
+            // Special case for /admin dashboard link to not be active if on a sub-page, unless it's exactly /admin
+            let finalIsActive = isActive;
+            if (item.href === '/admin' && pathname !== '/admin' && pathname.startsWith('/admin/')) {
+              finalIsActive = false;
+            }
+             if (item.href === '/admin' && pathname === '/admin') {
+                finalIsActive = true;
+            }
+
 
             return (
               <Link
@@ -117,7 +121,7 @@ export default function AdminSidebar() {
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted',
-                  isActive ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
+                  finalIsActive ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
                 )}
               >
                 <item.icon className="size-5" />
