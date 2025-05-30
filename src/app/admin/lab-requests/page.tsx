@@ -9,12 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eye, Search, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getManagedPatients, saveManagedPatients, type PatientLabRequest } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
+import type { AdminLabTest } from '@/lib/data/labTests';
 
 interface LabRequestWithPatientInfo extends PatientLabRequest {
   patientId: string;
@@ -125,6 +126,7 @@ export default function AdminLabRequestsPage() {
   const [activeTab, setActiveTab] = useState<PatientLabRequest['status'] | 'all'>("all");
   const [searchTerm, setSearchTerm] = useState('');
   const [allLabRequests, setAllLabRequests] = useState<LabRequestWithPatientInfo[]>([]);
+  const [displayableLabTests, setDisplayableLabTests] = useState<AdminLabTest[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -165,8 +167,11 @@ export default function AdminLabRequestsPage() {
   useEffect(() => { 
     if (currentUser) { 
       loadLabRequests();
+      if (currentUser.role === 'receptionist' || currentUser.role === 'admin') {
+        fetchDisplayableLabTests();
+      }
     }
-  }, [currentUser]);
+  }, [currentUser, toast]);
 
 
   const loadLabRequests = () => {
@@ -187,6 +192,20 @@ export default function AdminLabRequestsPage() {
       });
     });
     setAllLabRequests(requests.sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()));
+  };
+
+  const fetchDisplayableLabTests = async () => {
+    try {
+      const response = await fetch('/api/lab-tests');
+      if (!response.ok) {
+        throw new Error('Failed to fetch lab tests catalog');
+      }
+      const tests: AdminLabTest[] = await response.json();
+      setDisplayableLabTests(tests.sort((a,b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      console.error("Error fetching lab tests catalog:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests catalog." });
+    }
   };
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -245,8 +264,8 @@ export default function AdminLabRequestsPage() {
 
 
   return (
-    <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8">
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+    <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <h1 className="text-foreground tracking-tight text-3xl font-bold font-headline">Lab Requests</h1>
       </div>
 
@@ -287,8 +306,38 @@ export default function AdminLabRequestsPage() {
           </TabsContent>
         ))}
       </Tabs>
+
+      {(currentUser.role === 'receptionist' || currentUser.role === 'admin') && displayableLabTests.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl font-bold font-headline">Available Lab Tests & Prices</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-96 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-foreground font-medium">Test Name</TableHead>
+                    <TableHead className="text-foreground font-medium text-right">Price</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayableLabTests.map((test) => (
+                    <TableRow key={test.id}>
+                      <TableCell className="font-medium text-foreground">{test.name}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">${test.price.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
     
+
+      
