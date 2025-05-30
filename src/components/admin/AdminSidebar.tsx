@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, FlaskConical, NotebookPen, LogOut } from 'lucide-react';
+import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, FlaskConical, NotebookPen, LogOut, UserSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/data/users';
 import { useEffect, useState } from 'react';
