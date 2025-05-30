@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useForm, type SubmitHandler, Controller } from "react-hook-form";
@@ -18,45 +18,41 @@ import { z } from "zod";
 import { Search, UserPlus, Edit3, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import type { User, UserRole } from '@/lib/data/users'; // Import User and UserRole
+import { initialUsers, userRoles } from '@/lib/data/users'; // Import initialUsers and userRoles
+import { useToast } from "@/hooks/use-toast";
 
-type UserRole = 'admin' | 'doctor' | 'lab_tech' | 'receptionist' | 'patient';
-
-const userRoles: UserRole[] = ['admin', 'doctor', 'lab_tech', 'receptionist', 'patient'];
-
-interface User {
-  id: string;
-  fullName: string;
-  username: string;
-  role: UserRole;
-  status: 'Active' | 'Inactive';
-}
 
 const UserSchema = z.object({
   id: z.string().optional(),
   fullName: z.string().min(1, "Full name is required"),
-  username: z.string().min(1, "Username is required"),
+  username: z.string().email("Invalid email address").min(1, "Username/Email is required"),
   role: z.enum(userRoles, { errorMap: () => ({ message: "Role is required" }) }),
-  password: z.string().min(6, "Password must be at least 6 characters").optional(),
+  password: z.string().optional(), // Optional for editing, required for creation if not already set
   confirmPassword: z.string().optional(),
-}).refine(data => !data.id || !data.password || data.password === data.confirmPassword, { // if editing and password is set, it must match confirmPassword
+}).refine(data => {
+  // If it's a new user (no id) or if a password is provided for an existing user, then password is required
+  if (!data.id || data.password) {
+    return !!data.password && data.password.length >= 6;
+  }
+  return true; // Password not required/being changed
+}, {
+  message: "Password must be at least 6 characters",
+  path: ["password"],
+})
+.refine(data => {
+  // If password is provided, confirmPassword must match
+  if (data.password) {
+    return data.password === data.confirmPassword;
+  }
+  return true; // No password change, so no need to match
+}, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
-}).refine(data => data.id || data.password, { // if creating, password is required
-  message: "Password is required",
-  path: ["password"],
 });
 
 
 type UserFormData = z.infer<typeof UserSchema>;
-
-const initialUsers: User[] = [
-  { id: '1', fullName: 'Dr. Amelia Harper', username: 'amelia.harper@clinic.com', role: 'doctor', status: 'Active' },
-  { id: '2', fullName: 'Mark Johnson', username: 'mark.johnson@clinic.com', role: 'lab_tech', status: 'Active' },
-  { id: '3', fullName: 'Sarah Miller', username: 'sarah.miller@clinic.com', role: 'receptionist', status: 'Active' },
-  { id: '4', fullName: 'Admin User', username: 'admin@clinic.com', role: 'admin', status: 'Active' },
-  { id: '5', fullName: 'John Doe', username: 'john.patient@example.com', role: 'patient', status: 'Active' },
-  { id: '6', fullName: 'Dr. Robert Harris', username: 'robert.harris@clinic.com', role: 'doctor', status: 'Inactive'},
-];
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>(initialUsers);
@@ -68,9 +64,17 @@ export default function AdminUsersPage() {
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const { toast } = useToast();
 
-  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<UserFormData>({
+  const { register, handleSubmit, reset, setValue, control, formState: { errors }, watch } = useForm<UserFormData>({
     resolver: zodResolver(UserSchema),
+    defaultValues: {
+        fullName: '',
+        username: '',
+        role: undefined,
+        password: '',
+        confirmPassword: ''
+    }
   });
 
   useEffect(() => {
@@ -79,9 +83,10 @@ export default function AdminUsersPage() {
       setValue("fullName", editingUser.fullName);
       setValue("username", editingUser.username);
       setValue("role", editingUser.role);
-      // Password fields are intentionally not pre-filled for editing for security
+      setValue("password", ""); // Clear password fields for editing
+      setValue("confirmPassword", "");
     } else {
-      reset({ fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
+      reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
     }
   }, [editingUser, setValue, reset]);
 
@@ -99,7 +104,8 @@ export default function AdminUsersPage() {
 
   const openCreateForm = () => {
     setEditingUser(null);
-    reset({ fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
+    // reset form with specific undefined for optional fields to clear them
+    reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
     setIsFormOpen(true);
   };
 
@@ -108,23 +114,30 @@ export default function AdminUsersPage() {
     setIsFormOpen(true);
   };
 
-  const onSubmit: SubmitHandler<UserFormData> = (data) => {
+ const onSubmit: SubmitHandler<UserFormData> = (data) => {
     if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...data, id: u.id, status: u.status } : u));
-      // In a real app, password update would be handled more securely
-      console.log("Updated user:", { ...editingUser, ...data });
+      // Update existing user
+      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...data, password: data.password || u.password } : u));
+      toast({ title: "User Updated", description: `${data.fullName} has been updated.` });
     } else {
+      // Create new user
+      if (!data.password) { // Should be caught by validation, but good to double check
+        toast({ variant: "destructive", title: "Error", description: "Password is required for new users." });
+        return;
+      }
       const newUser: User = {
         ...data,
         id: (Math.random() + 1).toString(36).substring(7), // simple id generation
-        status: 'Active' // Default status
+        status: 'Active', // Default status
+        password: data.password, // Explicitly set password
       };
       setUsers([...users, newUser]);
-      console.log("Created user:", newUser);
+      toast({ title: "User Created", description: `${newUser.fullName} has been added.` });
     }
     setIsFormOpen(false);
-    reset();
+    reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
   };
+
 
   const openDeleteDialog = (user: User) => {
     setUserToDelete(user);
@@ -134,7 +147,7 @@ export default function AdminUsersPage() {
   const confirmDelete = () => {
     if (userToDelete) {
       setUsers(users.filter(u => u.id !== userToDelete.id));
-      console.log("Deleted user:", userToDelete);
+      toast({ title: "User Deleted", description: `${userToDelete.fullName} has been deleted.` });
     }
     setIsDeleteDialogOpen(false);
     setUserToDelete(null);
@@ -146,7 +159,7 @@ export default function AdminUsersPage() {
       case 'doctor': return 'default';
       case 'lab_tech': return 'secondary';
       case 'receptionist': return 'outline';
-      case 'patient': return 'default'; // Could be another color
+      case 'patient': return 'default';
       default: return 'secondary';
     }
   };
@@ -175,7 +188,7 @@ export default function AdminUsersPage() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as UserRole | 'all')} className="mb-6">
         <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
-          {['all', ...userRoles].map(role => (
+          {(['all', ...userRoles] as const).map(role => (
             <TabsTrigger
               key={role}
               value={role}
@@ -205,7 +218,7 @@ export default function AdminUsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-foreground font-medium">Full Name</TableHead>
-                  <TableHead className="text-foreground font-medium">Username</TableHead>
+                  <TableHead className="text-foreground font-medium">Username/Email</TableHead>
                   <TableHead className="text-foreground font-medium">Role</TableHead>
                   <TableHead className="text-foreground font-medium">Status</TableHead>
                   <TableHead className="text-foreground font-medium text-right">Actions</TableHead>
@@ -217,7 +230,7 @@ export default function AdminUsersPage() {
                     <TableCell className="font-medium text-foreground">{user.fullName}</TableCell>
                     <TableCell className="text-muted-foreground">{user.username}</TableCell>
                     <TableCell>
-                      <Badge variant={getRoleBadgeVariant(user.role) as any} className={cn(getRoleBadgeClassName(user.role), 'capitalize')}>
+                      <Badge variant={getRoleBadgeVariant(user.role)} className={cn(getRoleBadgeClassName(user.role), 'capitalize')}>
                         {user.role.replace('_', ' ')}
                       </Badge>
                     </TableCell>
@@ -249,7 +262,13 @@ export default function AdminUsersPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
+        setIsFormOpen(isOpen);
+        if (!isOpen) {
+          setEditingUser(null); // Clear editing user when dialog closes
+          reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' }); // Reset form
+        }
+      }}>
         <DialogContent className="sm:max-w-[425px] bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground font-headline">{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
@@ -264,7 +283,7 @@ export default function AdminUsersPage() {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="username" className="text-right text-muted-foreground">
-                Username
+                Email
               </Label>
               <Input id="username" {...register("username")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" />
               {errors.username && <p className="col-span-4 text-sm text-destructive text-right">{errors.username.message}</p>}
@@ -273,7 +292,7 @@ export default function AdminUsersPage() {
               <Label htmlFor="password" className="text-right text-muted-foreground">
                 Password
               </Label>
-              <Input id="password" type="password" {...register("password")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" />
+              <Input id="password" type="password" {...register("password")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" placeholder={editingUser ? "Leave blank to keep current" : ""}/>
               {errors.password && <p className="col-span-4 text-sm text-destructive text-right">{errors.password.message}</p>}
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -291,7 +310,7 @@ export default function AdminUsersPage() {
                 name="role"
                 control={control}
                 render={({ field }) => (
-                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ""} >
                     <SelectTrigger id="role" className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground">
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>

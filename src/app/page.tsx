@@ -1,27 +1,59 @@
+
 'use client';
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { useRouter } from 'next/navigation'; // For redirection after login
-import { useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent, useEffect } from 'react';
+import { useToast } from "@/hooks/use-toast";
+import { initialUsers, type User } from '@/lib/data/users';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Placeholder login handler
+  // Redirect if already logged in (basic check)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loggedInUser = localStorage.getItem('loggedInUser');
+      if (loggedInUser) {
+        router.push('/admin');
+      }
+    }
+  }, [router]);
+
+
   const handleLogin = (event: FormEvent) => {
     event.preventDefault();
-    // In a real app, you'd validate credentials here
-    // For now, simulate successful login and redirect to a generic dashboard or role-based one
-    // For example, redirect to admin dashboard
-    console.log("Login attempt with:", { email, password });
-    // router.push('/admin'); 
-    // For now, we'll just log it, actual routing will be part of role-based access feature
-    alert("Login functionality to be implemented. Redirecting to placeholder admin page for now.");
-    router.push('/admin'); // TEMPORARY: Redirect to admin page
+    setIsLoading(true);
+
+    const user = initialUsers.find(u => u.username === email && u.status === 'Active');
+
+    if (user && user.password === password) { // Insecure: direct password comparison
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('loggedInUser', JSON.stringify({
+          fullName: user.fullName,
+          username: user.username,
+          role: user.role,
+        }));
+      }
+      toast({
+        title: "Login Successful",
+        description: `Welcome back, ${user.fullName}!`,
+      });
+      router.push('/admin');
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: "Invalid email or password, or user is inactive.",
+      });
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -39,6 +71,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           <div className="w-full">
@@ -49,6 +82,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
         </div>
@@ -61,8 +95,9 @@ export default function LoginPage() {
           <Button
             type="submit"
             className="flex-1 h-10 px-4 text-sm font-bold leading-normal tracking-[0.015em] rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={isLoading}
           >
-            Log in
+            {isLoading ? 'Logging in...' : 'Log in'}
           </Button>
         </div>
       </form>
