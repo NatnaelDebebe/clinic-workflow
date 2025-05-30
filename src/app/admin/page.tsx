@@ -46,7 +46,8 @@ export default function AdminDashboardPage() {
 
   const fetchLabTestsCatalog = async () => {
     try {
-      const response = await fetch('/api/lab-tests');
+      // Add cache: 'no-store' to ensure fresh data is fetched
+      const response = await fetch('/api/lab-tests', { cache: 'no-store' });
       if (!response.ok) {
         throw new Error('Failed to fetch lab tests catalog');
       }
@@ -63,7 +64,7 @@ export default function AdminDashboardPage() {
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
       fetchLabTestsCatalog();
     }
-  }, [currentUser]); // Runs when currentUser state changes
+  }, [currentUser]); // Dependency array changed to [currentUser]
 
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
