@@ -33,7 +33,9 @@ export default function ManageLabTestsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole } | null>(null);
-  const [labTests, setLabTests] = useState<AdminLabTest[]>([]);
+  // This state will primarily be for displaying and initiating edits/deletes.
+  // The actual save operations will re-fetch from localStorage.
+  const [displayedLabTests, setDisplayedLabTests] = useState<AdminLabTest[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -46,6 +48,11 @@ export default function ManageLabTestsPage() {
     resolver: zodResolver(LabTestSchema),
   });
 
+  // Function to refresh the displayed lab tests
+  const refreshDisplayedLabTests = () => {
+    setDisplayedLabTests(getManagedLabTests());
+  };
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
@@ -57,7 +64,7 @@ export default function ManageLabTestsPage() {
             toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page." });
             router.push('/admin');
           } else {
-            setLabTests(getManagedLabTests());
+            refreshDisplayedLabTests(); // Initial load for display
           }
         } catch (e) { console.error("Error parsing current user", e); router.push('/'); }
       } else {
@@ -71,10 +78,10 @@ export default function ManageLabTestsPage() {
   };
 
   const filteredLabTests = useMemo(() => {
-    return labTests.filter(test =>
+    return displayedLabTests.filter(test =>
       test.name.toLowerCase().includes(searchTerm)
     );
-  }, [labTests, searchTerm]);
+  }, [displayedLabTests, searchTerm]);
 
   const openCreateForm = () => {
     setEditingTest(null);
@@ -91,15 +98,17 @@ export default function ManageLabTestsPage() {
   };
 
   const onSubmit: SubmitHandler<LabTestFormData> = (data) => {
+    const currentPersistedTests = getManagedLabTests(); // Read fresh from localStorage
     let updatedTests;
+
     if (editingTest) {
-      updatedTests = labTests.map(t => 
+      updatedTests = currentPersistedTests.map(t => 
         t.id === editingTest.id ? { ...editingTest, name: data.name, price: data.price } : t
       );
       toast({ title: "Lab Test Updated", description: `${data.name} has been updated.` });
     } else {
       const newTestId = generateLabTestId(data.name);
-      if (labTests.some(t => t.id === newTestId)) {
+      if (currentPersistedTests.some(t => t.id === newTestId)) {
         toast({ variant: "destructive", title: "Error", description: "A test with a similar name already exists (ID conflict)." });
         return;
       }
@@ -108,11 +117,12 @@ export default function ManageLabTestsPage() {
         name: data.name, 
         price: data.price 
       };
-      updatedTests = [...labTests, newTest];
+      updatedTests = [...currentPersistedTests, newTest];
       toast({ title: "Lab Test Added", description: `${newTest.name} has been added.` });
     }
-    setLabTests(updatedTests);
-    saveManagedLabTests(updatedTests);
+    
+    saveManagedLabTests(updatedTests); // Save to localStorage (this will dispatch the event)
+    refreshDisplayedLabTests(); // Update the local React state for immediate UI feedback
     setIsFormOpen(false);
   };
 
@@ -123,9 +133,11 @@ export default function ManageLabTestsPage() {
 
   const confirmDelete = () => {
     if (testToDelete) {
-      const updatedTests = labTests.filter(t => t.id !== testToDelete.id);
-      setLabTests(updatedTests);
-      saveManagedLabTests(updatedTests);
+      const currentPersistedTests = getManagedLabTests(); // Read fresh from localStorage
+      const updatedTests = currentPersistedTests.filter(t => t.id !== testToDelete.id);
+      
+      saveManagedLabTests(updatedTests); // Save to localStorage (this will dispatch the event)
+      refreshDisplayedLabTests(); // Update the local React state for immediate UI feedback
       toast({ title: "Lab Test Deleted", description: `${testToDelete.name} has been deleted.` });
     }
     setIsDeleteDialogOpen(false);
@@ -241,3 +253,5 @@ export default function ManageLabTestsPage() {
     </div>
   );
 }
+
+    
