@@ -1,14 +1,14 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { UserRole } from '@/lib/data/users';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest } from '@/lib/data/labTests';
+import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest, getManagedLabTests } from '@/lib/data/labTests'; // Import getManagedLabTests
 
 // Sample data for upcoming appointments
 const upcomingAppointments = [
@@ -43,40 +43,33 @@ export default function AdminDashboardPage() {
     }
   }, [router, toast]);
 
-  const fetchLabTestsCatalog = async () => {
-    try {
-      const response = await fetch('/api/lab-tests', { cache: 'no-store' });
-      if (!response.ok) {
-        console.error("Failed to fetch lab tests catalog, status:", response.status);
-        toast({ variant: "destructive", title: "Error", description: `Could not load lab tests catalog. Status: ${response.status}` });
-        setLabTestsCatalog([]); 
-        return;
-      }
-      const tests: AdminLabTest[] = await response.json();
+  // Function to load/refresh lab tests directly from localStorage
+  const refreshLabTestsView = useCallback(() => {
+    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
+      // console.log("Dashboard: Refreshing lab tests view directly from localStorage..."); // For debugging
+      const tests = getManagedLabTests();
       setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch (error) {
-      console.error("Error fetching lab tests catalog for dashboard:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests catalog." });
+    } else {
       setLabTestsCatalog([]);
     }
-  };
+  }, [currentUser]); // Depends on currentUser to know if it should load
 
   useEffect(() => {
-    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
-      fetchLabTestsCatalog(); // Initial fetch
+    // Initial load
+    refreshLabTestsView();
 
-      const handleLabTestsUpdate = () => {
-        fetchLabTestsCatalog();
-      };
+    // Listen for updates
+    const handleLabTestsUpdate = () => {
+      // console.log("Dashboard: labTestsUpdated event received, refreshing view..."); // For debugging
+      refreshLabTestsView();
+    };
 
-      window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
-      return () => {
-        window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
-      };
-    } else {
-      setLabTestsCatalog([]); // Clear catalog if user/role doesn't require it
-    }
-  }, [currentUser]); // Re-run if currentUser changes, or for initial setup
+    window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+    return () => {
+      window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+    };
+  }, [refreshLabTestsView]); // Depends on the memoized refreshLabTestsView
+
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
   const showLabTestCatalog = currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist');
