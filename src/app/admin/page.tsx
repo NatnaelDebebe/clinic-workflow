@@ -1,14 +1,17 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import type { ChangeEvent } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Search } from 'lucide-react';
 import type { UserRole } from '@/lib/data/users';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest, getManagedLabTests } from '@/lib/data/labTests'; // Import getManagedLabTests
+import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest, getManagedLabTests } from '@/lib/data/labTests';
 
 // Sample data for upcoming appointments
 const upcomingAppointments = [
@@ -24,6 +27,7 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string } | null>(null);
   const [labTestsCatalog, setLabTestsCatalog] = useState<AdminLabTest[]>([]);
+  const [labTestSearchTerm, setLabTestSearchTerm] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -43,24 +47,21 @@ export default function AdminDashboardPage() {
     }
   }, [router, toast]);
 
-  // Function to load/refresh lab tests directly from localStorage
   const refreshLabTestsView = useCallback(() => {
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
-      // console.log("Dashboard: Refreshing lab tests view directly from localStorage..."); // For debugging
-      const tests = getManagedLabTests();
+      const tests = getManagedLabTests(); // Direct read from localStorage
       setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
     } else {
       setLabTestsCatalog([]);
     }
-  }, [currentUser]); // Depends on currentUser to know if it should load
+  }, [currentUser]);
 
   useEffect(() => {
-    // Initial load
+    // Initial load based on currentUser
     refreshLabTestsView();
 
-    // Listen for updates
+    // Listen for updates triggered by changes in localStorage
     const handleLabTestsUpdate = () => {
-      // console.log("Dashboard: labTestsUpdated event received, refreshing view..."); // For debugging
       refreshLabTestsView();
     };
 
@@ -68,8 +69,18 @@ export default function AdminDashboardPage() {
     return () => {
       window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
     };
-  }, [refreshLabTestsView]); // Depends on the memoized refreshLabTestsView
+  }, [refreshLabTestsView]); // refreshLabTestsView depends on currentUser
 
+  const handleLabTestSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setLabTestSearchTerm(event.target.value.toLowerCase());
+  };
+
+  const filteredLabTestsCatalog = useMemo(() => {
+    if (!labTestSearchTerm) return labTestsCatalog;
+    return labTestsCatalog.filter(test =>
+      test.name.toLowerCase().includes(labTestSearchTerm)
+    );
+  }, [labTestsCatalog, labTestSearchTerm]);
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
   const showLabTestCatalog = currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist');
@@ -155,6 +166,18 @@ export default function AdminDashboardPage() {
               <CardTitle className="text-xl font-bold font-headline">Available Lab Tests &amp; Prices</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search lab tests by name..."
+                    className="pl-10 h-10 rounded-md border-input bg-background placeholder:text-muted-foreground"
+                    value={labTestSearchTerm}
+                    onChange={handleLabTestSearchChange}
+                  />
+                </div>
+              </div>
               <div className="max-h-[300px] overflow-y-auto">
                 <Table>
                   <TableHeader>
@@ -164,7 +187,7 @@ export default function AdminDashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {labTestsCatalog.map((test) => (
+                    {filteredLabTestsCatalog.map((test) => (
                       <TableRow key={test.id}>
                         <TableCell className="font-medium text-foreground">{test.name}</TableCell>
                         <TableCell className="text-muted-foreground text-right">${test.price.toFixed(2)}</TableCell>
@@ -172,6 +195,11 @@ export default function AdminDashboardPage() {
                     ))}
                   </TableBody>
                 </Table>
+                {filteredLabTestsCatalog.length === 0 && labTestsCatalog.length > 0 && (
+                     <div className="text-center py-10 text-muted-foreground">
+                        No lab tests found matching your search.
+                     </div>
+                )}
                 {labTestsCatalog.length === 0 && (
                      <div className="text-center py-10 text-muted-foreground">
                         No lab tests found in the catalog.
