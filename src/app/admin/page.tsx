@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import type { UserRole } from '@/lib/data/users';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import type { AdminLabTest } from '@/lib/data/labTests';
+import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest } from '@/lib/data/labTests';
 
 // Sample data for upcoming appointments
 const upcomingAppointments = [
@@ -49,6 +49,7 @@ export default function AdminDashboardPage() {
       if (!response.ok) {
         console.error("Failed to fetch lab tests catalog, status:", response.status);
         toast({ variant: "destructive", title: "Error", description: `Could not load lab tests catalog. Status: ${response.status}` });
+        setLabTestsCatalog([]); 
         return;
       }
       const tests: AdminLabTest[] = await response.json();
@@ -56,14 +57,26 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error("Error fetching lab tests catalog for dashboard:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests catalog." });
+      setLabTestsCatalog([]);
     }
   };
 
   useEffect(() => {
     if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
-      fetchLabTestsCatalog();
+      fetchLabTestsCatalog(); // Initial fetch
+
+      const handleLabTestsUpdate = () => {
+        fetchLabTestsCatalog();
+      };
+
+      window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+      return () => {
+        window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+      };
+    } else {
+      setLabTestsCatalog([]); // Clear catalog if user/role doesn't require it
     }
-  }, [currentUser]);
+  }, [currentUser]); // Re-run if currentUser changes, or for initial setup
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
   const showLabTestCatalog = currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist');

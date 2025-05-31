@@ -51,6 +51,7 @@ export const initialLabTests: AdminLabTest[] = initialLabTestsData.map(test => (
 }));
 
 const MANAGED_LAB_TESTS_STORAGE_KEY = 'managedLabTests';
+export const LAB_TESTS_UPDATED_EVENT = 'labTestsUpdated'; // Export event name
 
 export function getManagedLabTests(): AdminLabTest[] {
   if (typeof window !== 'undefined') {
@@ -74,6 +75,7 @@ export function getManagedLabTests(): AdminLabTest[] {
 export function saveManagedLabTests(tests: AdminLabTest[]): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(MANAGED_LAB_TESTS_STORAGE_KEY, JSON.stringify(tests));
+    window.dispatchEvent(new CustomEvent(LAB_TESTS_UPDATED_EVENT)); // Dispatch event
   }
 }
 export { generateLabTestId };

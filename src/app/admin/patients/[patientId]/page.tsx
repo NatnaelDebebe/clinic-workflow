@@ -20,7 +20,7 @@ import { useForm, type SubmitHandler, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Edit, PlusCircle, Trash2 } from 'lucide-react';
-import type { AdminLabTest } from '@/lib/data/labTests'; // Import AdminLabTest
+import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest } from '@/lib/data/labTests';
 
 const MedicalHistorySchema = z.object({
   id: z.string().optional(),
@@ -101,22 +101,36 @@ export default function PatientDetailPage() {
     }
   }, [patientId, router, toast]);
 
-  useEffect(() => {
-    const fetchLabTests = async () => {
-      try {
-        const response = await fetch('/api/lab-tests');
-        if (!response.ok) {
-          throw new Error('Failed to fetch lab tests');
-        }
-        const testsFromApi: AdminLabTest[] = await response.json();
-        setAvailableTests(testsFromApi);
-      } catch (error) {
-        console.error("Error fetching lab tests:", error);
+  const fetchAvailableLabTests = async () => {
+    try {
+      const response = await fetch('/api/lab-tests', { cache: 'no-store' });
+      if (!response.ok) {
+        console.error('Failed to fetch available lab tests, status:', response.status);
         toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests." });
+        setAvailableTests([]);
+        return;
       }
+      const testsFromApi: AdminLabTest[] = await response.json();
+      setAvailableTests(testsFromApi);
+    } catch (error) {
+      console.error("Error fetching available lab tests:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests." });
+      setAvailableTests([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableLabTests(); // Initial fetch
+
+    const handleLabTestsUpdate = () => {
+      fetchAvailableLabTests();
     };
-    fetchLabTests();
-  }, [toast]);
+
+    window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+    return () => {
+      window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+    };
+  }, []); // Empty dependency array to run once on mount and set up listener
 
 
   const updatePatientData = (updatedPatient: Patient) => {
@@ -224,9 +238,9 @@ export default function PatientDetailPage() {
       return;
     }
     const newLabRequest: PatientLabRequest = {
-      id: (Math.random() + 1).toString(36).substring(2), // Unique ID for this request instance
-      testId: selectedApiTest.id, // ID from AdminLabTest
-      testName: selectedApiTest.name, // Name from AdminLabTest
+      id: (Math.random() + 1).toString(36).substring(2), 
+      testId: selectedApiTest.id, 
+      testName: selectedApiTest.name, 
       requestedDate: new Date().toISOString().split('T')[0],
       status: 'Pending Payment', 
       requestedBy: currentUser.fullName,
