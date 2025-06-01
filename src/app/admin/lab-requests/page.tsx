@@ -2,19 +2,19 @@
 'use client';
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Search, FileTextIcon } from 'lucide-react'; // Replaced CheckCircle with FileTextIcon
+import { Eye, Search, FileTextIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { getManagedPatients, saveManagedPatients, type PatientLabRequest, type Patient } from '@/lib/data/patients';
+import { getManagedPatients, saveManagedPatients, type PatientLabRequest, type Patient, PATIENTS_UPDATED_EVENT } from '@/lib/data/patients'; // Added PATIENTS_UPDATED_EVENT
 import type { UserRole } from '@/lib/data/users';
 import { userRoles as validUserRoles } from '@/lib/data/users'; 
 import { useToast } from "@/hooks/use-toast";
@@ -34,7 +34,7 @@ const LabResultSchema = z.object({
 type LabResultFormData = z.infer<typeof LabResultSchema>;
 
 const TABS_CONFIG: Array<{value: PatientLabRequest['status'] | 'all', label: string, roles: UserRole[]}> = [
-  { value: 'all', label: 'All', roles: ['admin', 'doctor', 'receptionist', 'lab_tech'] }, // Added lab_tech to all
+  { value: 'all', label: 'All', roles: ['admin', 'doctor', 'receptionist', 'lab_tech'] },
   { value: 'Pending Payment', label: 'Pending Payment', roles: ['admin', 'receptionist', 'doctor'] },
   { value: 'Pending', label: 'Pending Processing', roles: ['admin', 'lab_tech', 'doctor'] },
   { value: 'Completed', label: 'Completed', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
@@ -164,21 +164,21 @@ export default function AdminLabRequestsPage() {
             router.push('/');
             return;
           }
-          setCurrentUser(userData);
-
+          
            if (!['admin', 'doctor', 'lab_tech', 'receptionist'].includes(userData.role)) {
              toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
              router.push('/admin');
              return;
            }
           
-          // Set initial active tab based on role
+          setCurrentUser(userData);
+          
           if (userData.role === 'lab_tech') {
             setActiveTab('Pending');
           } else if (userData.role === 'receptionist') {
             setActiveTab('Pending Payment');
           } else {
-            setActiveTab('all'); // Default for admin/doctor
+            setActiveTab('all'); 
           }
 
         } catch (e) { 
@@ -192,28 +192,17 @@ export default function AdminLabRequestsPage() {
         return;
       }
     }
-  }, [router, toast]); 
-
-  useEffect(() => { 
-    if (currentUser) { 
-      loadLabRequests();
-    }
-  }, [currentUser]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
 
-  const loadLabRequests = () => {
+  const loadLabRequests = useCallback(() => {
     if (!currentUser) return; 
 
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
       patient.labRequests.forEach(req => {
-        // Lab techs see 'Pending' and 'Completed' by default, others see all related to their role/filters
-        if (currentUser.role === 'lab_tech' && !(req.status === 'Pending' || req.status === 'Completed')) {
-          // This specific filter might be too restrictive if they want to see 'all' their relevant ones.
-          // The tabs will handle filtering, so let's include all for lab_tech here and let tabs filter.
-           // return; 
-        }
         requests.push({
           ...req,
           patientId: patient.id,
@@ -222,7 +211,22 @@ export default function AdminLabRequestsPage() {
       });
     });
     setAllLabRequests(requests.sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()));
-  };
+  }, [currentUser]);
+
+  useEffect(() => { 
+    if (currentUser) { 
+      loadLabRequests();
+    }
+    // Event listener for real-time updates
+    const handlePatientsUpdate = () => {
+      if (currentUser) loadLabRequests(); // Check currentUser before loading
+    };
+    window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    return () => {
+      window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    };
+  }, [currentUser, loadLabRequests]);
+
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value.toLowerCase());
@@ -231,7 +235,6 @@ export default function AdminLabRequestsPage() {
   const getFilteredRequestsForTab = (tabKey: PatientLabRequest['status'] | 'all') => {
     let baseRequests = allLabRequests; 
     
-    // Filter by currentUser role if lab_tech to only show relevant items in "All"
     if (currentUser?.role === 'lab_tech' && tabKey === 'all') {
       baseRequests = allLabRequests.filter(req => req.status === 'Pending' || req.status === 'Completed');
     } else if (tabKey !== 'all') {
@@ -248,7 +251,7 @@ export default function AdminLabRequestsPage() {
   const openResultsModal = (request: LabRequestWithPatientInfo) => {
     if (currentUser?.role !== 'lab_tech') return;
     setCurrentRequestForResults(request);
-    resetResult({ resultsSummary: '' }); // Reset form
+    resetResult({ resultsSummary: '' });
     setIsResultsModalOpen(true);
   };
 
@@ -376,3 +379,4 @@ export default function AdminLabRequestsPage() {
     </div>
   );
 }
+
