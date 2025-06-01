@@ -35,56 +35,72 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string; id: string} | null>(null); // Ensure id is string
+  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string; id: string} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
+    // This effect runs once on mount to initialize currentUser from localStorage
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
+          // Basic validation for sidebar display
           if (userData && typeof userData === 'object' && userData.id && userData.role && validUserRoles.includes(userData.role)) {
             setCurrentUser(userData);
           } else {
-            toast({ variant: "destructive", title: "Session Error", description: "Invalid user data in session. Please log in again." });
+            // Invalid data structure, clear it. Page-level checks will handle redirects.
             localStorage.removeItem('loggedInUser');
-            if (pathname !== '/') router.push('/');
+            setCurrentUser(null);
           }
         } catch (error) {
-          console.error("Failed to parse user data from localStorage in Sidebar", error);
-          toast({ variant: "destructive", title: "Session Error", description: "Could not read session. Please log in again." });
+          // Parsing error, clear it
+          console.error("Failed to parse user data from localStorage in Sidebar (mount)", error);
           localStorage.removeItem('loggedInUser');
-          if (pathname !== '/') router.push('/');
+          setCurrentUser(null);
         }
       } else {
-        if (pathname !== '/') {
-          router.push('/');
-        }
+        setCurrentUser(null); // No user in storage
       }
     }
-  }, [router, pathname, toast]); // Dependencies: router, pathname, toast
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array: runs once on mount
+
+  // This separate effect handles redirection if currentUser is null AND not on login page
+  // This addresses cases where localStorage might be cleared by another tab or an error.
+  useEffect(() => {
+    if (isClient && !currentUser && pathname !== '/') {
+        // If after initial load, currentUser is still null (e.g. cleared by another process or bad initial state)
+        // and we are not on the login page, redirect to login.
+        // This prevents trying to render protected content without a user.
+        router.push('/');
+    }
+  }, [isClient, currentUser, pathname, router]);
+
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('loggedInUser');
     }
+    setCurrentUser(null); // Clear user state
     toast({ title: "Logged Out", description: "You have been successfully logged out." });
     router.push('/');
   };
-  
-  if (!isClient) { 
+
+  if (!isClient) {
     return (
       <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
         <div>Loading user...</div>
       </aside>
     );
   }
-  
-  if (pathname === '/') return null;
 
-  if (!currentUser && pathname !== '/') {
+  if (pathname === '/') return null; // Don't show sidebar on login page
+
+  if (!currentUser) {
+      // This state can be brief if redirecting, or if initial check found no user.
+      // It's important not to try rendering user-specific content here.
       return (
           <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
               <div>Authenticating...</div>
@@ -92,60 +108,58 @@ export default function AdminSidebar() {
       );
   }
 
-  const accessibleNavItems = navItems.filter(item => currentUser && item.roles.includes(currentUser.role));
-  const userInitials = currentUser ? getInitials(currentUser.fullName) : '';
+  const accessibleNavItems = navItems.filter(item => item.roles.includes(currentUser.role));
+  const userInitials = getInitials(currentUser.fullName);
 
   return (
     <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
-      {currentUser && (
-        <>
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 p-2">
-              <Avatar className="size-10">
-                <AvatarImage src={`https://placehold.co/40x40.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="avatar placeholder"/>
-                <AvatarFallback>{userInitials}</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col">
-                <h1 className="text-foreground text-base font-medium leading-normal">{currentUser.fullName}</h1>
-                <p className="text-muted-foreground text-sm font-normal leading-normal capitalize">
-                  {currentUser.role.replace('_', ' ')}
-                </p>
-              </div>
+      <>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3 p-2">
+            <Avatar className="size-10">
+              <AvatarImage src={`https://placehold.co/40x40.png?text=${userInitials}`} alt={currentUser.fullName} data-ai-hint="avatar placeholder"/>
+              <AvatarFallback>{userInitials}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <h1 className="text-foreground text-base font-medium leading-normal">{currentUser.fullName}</h1>
+              <p className="text-muted-foreground text-sm font-normal leading-normal capitalize">
+                {currentUser.role.replace('_', ' ')}
+              </p>
             </div>
-            <nav className="flex flex-col gap-2 mt-4">
-              {accessibleNavItems.map((item) => {
-                const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href + '/')) || (pathname.startsWith(item.href) && item.href !== '/admin' && !pathname.substring(item.href.length).includes('/'));
-
-                let finalIsActive = isActive;
-                if (item.href === '/admin' && pathname !== '/admin' && pathname.startsWith('/admin/')) {
-                  finalIsActive = false;
-                }
-                if (item.href === '/admin' && pathname === '/admin') {
-                    finalIsActive = true;
-                }
-
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted',
-                      finalIsActive ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
-                    )}
-                  >
-                    <item.icon className="size-5" />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
           </div>
-          <Button variant="outline" onClick={handleLogout} className="w-full">
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </>
-      )}
+          <nav className="flex flex-col gap-2 mt-4">
+            {accessibleNavItems.map((item) => {
+              const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href + '/')) || (pathname.startsWith(item.href) && item.href !== '/admin' && !pathname.substring(item.href.length).includes('/'));
+
+              let finalIsActive = isActive;
+              if (item.href === '/admin' && pathname !== '/admin' && pathname.startsWith('/admin/')) {
+                finalIsActive = false;
+              }
+              if (item.href === '/admin' && pathname === '/admin') {
+                  finalIsActive = true;
+              }
+
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted',
+                    finalIsActive ? 'bg-primary text-primary-foreground font-semibold' : 'text-foreground hover:text-foreground'
+                  )}
+                >
+                  <item.icon className="size-5" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+        <Button variant="outline" onClick={handleLogout} className="w-full">
+          <LogOut className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
+      </>
     </aside>
   );
 }

@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Label } from "@/components/ui/label";
 import { getManagedPatients, saveManagedPatients, type PatientLabRequest, type Patient, PATIENTS_UPDATED_EVENT } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
-import { userRoles as validUserRoles } from '@/lib/data/users'; 
+import { userRoles as validUserRoles } from '@/lib/data/users';
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { useForm, type SubmitHandler } from "react-hook-form";
@@ -44,11 +44,11 @@ const TABS_CONFIG: Array<{value: PatientLabRequest['status'] | 'all', label: str
 const getStatusVariant = (status: string) => {
   switch (status.toLowerCase()) {
     case 'pending payment':
-      return 'secondary'; 
-    case 'pending': 
-      return 'default'; 
+      return 'secondary';
+    case 'pending':
+      return 'default';
     case 'completed':
-      return 'outline'; 
+      return 'outline';
     case 'cancelled':
         return 'destructive';
     default:
@@ -60,7 +60,7 @@ const getStatusClassName = (status: string) => {
     switch (status.toLowerCase()) {
         case 'pending payment':
             return 'bg-yellow-500/20 text-yellow-700';
-        case 'pending': 
+        case 'pending':
             return 'bg-blue-500/20 text-blue-700';
         case 'completed':
             return 'bg-green-500/20 text-green-700';
@@ -71,13 +71,13 @@ const getStatusClassName = (status: string) => {
     }
 };
 
-const LabRequestTable = ({ 
-  requests, 
+const LabRequestTable = ({
+  requests,
   currentUserRole,
   onEnterResults,
   onViewDetails,
-}: { 
-  requests: LabRequestWithPatientInfo[], 
+}: {
+  requests: LabRequestWithPatientInfo[],
   currentUserRole: UserRole | null,
   onEnterResults: (request: LabRequestWithPatientInfo) => void,
   onViewDetails: (patientId: string, requestId: string) => void,
@@ -102,7 +102,7 @@ const LabRequestTable = ({
             <TableCell className="text-muted-foreground">{request.requestedDate}</TableCell>
             <TableCell className="text-muted-foreground">${request.priceAtTimeOfRequest?.toFixed(2) || 'N/A'}</TableCell>
             <TableCell>
-              <Badge 
+              <Badge
                 variant={getStatusVariant(request.status) as any}
                 className={getStatusClassName(request.status)}
               >
@@ -139,7 +139,7 @@ export default function AdminLabRequestsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id: string; } | null>(null);
-  
+
   const [activeTab, setActiveTab] = useState<PatientLabRequest['status'] | 'all'>("all");
   const [searchTerm, setSearchTerm] = useState('');
   const [allLabRequests, setAllLabRequests] = useState<LabRequestWithPatientInfo[]>([]);
@@ -152,51 +152,55 @@ export default function AdminLabRequestsPage() {
   });
 
   useEffect(() => {
+    // This effect runs once on mount to authenticate and set up the user for this page
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
-          
-          if (!userData || !userData.role || !validUserRoles.includes(userData.role) || !userData.id || typeof userData.id !== 'string') {
-            toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data. Please log in again." });
-            localStorage.removeItem('loggedInUser');
-            router.push('/');
-            return;
-          }
-          
-           if (!['admin', 'doctor', 'lab_tech', 'receptionist'].includes(userData.role)) {
-             toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
-             router.push('/admin');
-             return;
-           }
-          
-          setCurrentUser(userData);
-          
-          if (userData.role === 'lab_tech') {
-            setActiveTab('Pending');
-          } else if (userData.role === 'receptionist') {
-            setActiveTab('Pending Payment');
-          } else {
-            setActiveTab('all'); 
-          }
-
-        } catch (e) { 
-            console.error("Error parsing current user from localStorage on /admin/lab-requests", e);
-            localStorage.removeItem('loggedInUser');
-            router.push('/'); 
-            return;
-        }
-      } else {
-        router.push('/');
+      if (!storedUser) {
+        router.push('/'); // No user found, redirect to login
         return;
       }
+
+      try {
+        const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
+
+        if (!userData || !userData.id || typeof userData.id !== 'string' || !userData.role || !validUserRoles.includes(userData.role)) {
+          toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data. Please log in again." });
+          localStorage.removeItem('loggedInUser');
+          router.push('/');
+          return;
+        }
+
+        if (!['admin', 'doctor', 'lab_tech', 'receptionist'].includes(userData.role)) {
+          toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
+          router.push('/admin'); // Redirect to a general admin page if role not allowed here
+          return;
+        }
+
+        setCurrentUser(userData); // Set the current user if all checks pass
+
+        // Set activeTab based on role AFTER currentUser is set and validated
+        if (userData.role === 'lab_tech') {
+          setActiveTab('Pending');
+        } else if (userData.role === 'receptionist') {
+          setActiveTab('Pending Payment');
+        } else {
+          // For admin, doctor, or other roles default to 'all' or specific logic
+          setActiveTab('all');
+        }
+
+      } catch (e) {
+        console.error("Error parsing current user from localStorage on /admin/lab-requests", e);
+        toast({ variant: "destructive", title: "Session Error", description: "Please log in again." });
+        localStorage.removeItem('loggedInUser');
+        router.push('/');
+      }
     }
-  }, [router, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs once on mount
 
 
   const loadLabRequests = useCallback(() => {
-    if (!currentUser || !currentUser.id) return; 
+    if (!currentUser || !currentUser.id) return;
 
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
@@ -212,12 +216,13 @@ export default function AdminLabRequestsPage() {
     setAllLabRequests(requests.sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()));
   }, [currentUser]);
 
-  useEffect(() => { 
-    if (currentUser && currentUser.id) { 
+  useEffect(() => {
+    if (currentUser && currentUser.id) { // Ensure currentUser and its ID are available
       loadLabRequests();
     }
+    // Setup event listener
     const handlePatientsUpdate = () => {
-      if (currentUser && currentUser.id) loadLabRequests(); 
+      if (currentUser && currentUser.id) loadLabRequests();
     };
     window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
     return () => {
@@ -231,25 +236,25 @@ export default function AdminLabRequestsPage() {
   };
 
   const getFilteredRequestsForTab = (tabKey: PatientLabRequest['status'] | 'all') => {
-    let baseRequests = allLabRequests; 
-    
+    let baseRequests = allLabRequests;
+
     if (currentUser?.role === 'lab_tech' && tabKey === 'all') {
       baseRequests = allLabRequests.filter(req => req.status === 'Pending' || req.status === 'Completed');
     } else if (tabKey !== 'all') {
       baseRequests = allLabRequests.filter(req => req.status === tabKey);
     }
-    
+
     if (!searchTerm) return baseRequests;
-    return baseRequests.filter(req => 
+    return baseRequests.filter(req =>
       req.patientName.toLowerCase().includes(searchTerm) ||
       req.testName.toLowerCase().includes(searchTerm)
     );
   };
-  
+
   const openResultsModal = (request: LabRequestWithPatientInfo) => {
     if (currentUser?.role !== 'lab_tech') return;
     setCurrentRequestForResults(request);
-    resetResult({ resultsSummary: '' });
+    resetResult({ resultsSummary: request.resultsSummary || '' }); // Pre-fill if editing
     setIsResultsModalOpen(true);
   };
 
@@ -269,16 +274,16 @@ export default function AdminLabRequestsPage() {
         toast({ variant: "destructive", title: "Error", description: "Lab request not found." });
         return;
     }
-    
+
     patient.labRequests[requestIndex].status = 'Completed';
     patient.labRequests[requestIndex].resultsSummary = data.resultsSummary;
-    patient.labRequests[requestIndex].resultEnteredBy = currentUser.fullName; // Use fullName
+    patient.labRequests[requestIndex].resultEnteredBy = currentUser.fullName;
     patient.labRequests[requestIndex].resultDate = new Date().toISOString().split('T')[0];
-    
+
     patients[patientIndex] = patient;
     saveManagedPatients(patients);
     toast({ title: "Lab Results Submitted", description: `Results for ${patient.labRequests[requestIndex].testName} have been submitted.` });
-    loadLabRequests(); 
+    loadLabRequests();
     setIsResultsModalOpen(false);
     setCurrentRequestForResults(null);
   };
@@ -286,7 +291,7 @@ export default function AdminLabRequestsPage() {
   const handleViewDetails = (patientId: string, requestId: string) => {
     // Intentionally left for navigation via Link component
   };
-  
+
   const availableTabs = useMemo(() => {
     if (!currentUser) return [];
     return TABS_CONFIG.filter(tab => tab.roles.includes(currentUser.role));
@@ -306,16 +311,16 @@ export default function AdminLabRequestsPage() {
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PatientLabRequest['status'] | 'all')} className="w-full">
             <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
               {availableTabs.map(tab => (
-                <TabsTrigger 
+                <TabsTrigger
                   key={tab.value}
-                  value={tab.value} 
+                  value={tab.value}
                   className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
                 >
                   {tab.label}
                 </TabsTrigger>
               ))}
             </TabsList>
-            
+
             <div className="mt-6 mb-6">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -331,8 +336,8 @@ export default function AdminLabRequestsPage() {
 
             {availableTabs.map(tab => (
               <TabsContent key={tab.value} value={tab.value}>
-                <LabRequestTable 
-                  requests={getFilteredRequestsForTab(tab.value)} 
+                <LabRequestTable
+                  requests={getFilteredRequestsForTab(tab.value)}
                   currentUserRole={currentUser.role}
                   onEnterResults={openResultsModal}
                   onViewDetails={handleViewDetails}
@@ -346,7 +351,7 @@ export default function AdminLabRequestsPage() {
         setIsResultsModalOpen(isOpen);
         if (!isOpen) {
           setCurrentRequestForResults(null);
-          resetResult(); 
+          resetResult();
         }
       }}>
         <DialogContent className="sm:max-w-lg bg-card">
@@ -358,11 +363,11 @@ export default function AdminLabRequestsPage() {
           <form onSubmit={handleSubmitResult(onResultsSubmit)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="resultsSummary" className="text-muted-foreground">Results Summary</Label>
-              <Textarea 
-                id="resultsSummary" 
-                {...registerResult("resultsSummary")} 
-                rows={8} 
-                className="mt-1 bg-background border-input text-foreground placeholder:text-muted-foreground" 
+              <Textarea
+                id="resultsSummary"
+                {...registerResult("resultsSummary")}
+                rows={8}
+                className="mt-1 bg-background border-input text-foreground placeholder:text-muted-foreground"
                 placeholder="Enter the lab test results summary here..."
               />
               {errorsResult.resultsSummary && <p className="text-sm text-destructive mt-1">{errorsResult.resultsSummary.message}</p>}
@@ -377,3 +382,4 @@ export default function AdminLabRequestsPage() {
     </div>
   );
 }
+
