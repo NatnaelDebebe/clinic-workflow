@@ -123,7 +123,7 @@ const AppointmentTable = ({ appointments, onActionClick }: { appointments: Appoi
 export default function AdminAppointmentsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string; role: UserRole; username: string; } | null>(null);
   
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -138,8 +138,12 @@ export default function AdminAppointmentsPage() {
   });
 
   const fetchAppointments = useCallback(() => {
-    setAllAppointments(getManagedAppointments().sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-  }, []);
+    let appointments = getManagedAppointments();
+    if (currentUser && currentUser.role === 'doctor') {
+      appointments = appointments.filter(apt => apt.doctorId === currentUser.id);
+    }
+    setAllAppointments(appointments.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  }, [currentUser]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -160,7 +164,6 @@ export default function AdminAppointmentsPage() {
       }
     }
     
-    fetchAppointments();
     setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
     setDoctorsForForm(
       getManagedUsers()
@@ -173,6 +176,12 @@ export default function AdminAppointmentsPage() {
       window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
     };
   }, [router, toast, fetchAppointments]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchAppointments();
+    }
+  }, [currentUser, fetchAppointments]);
 
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -214,7 +223,7 @@ export default function AdminAppointmentsPage() {
 
 
   const handleViewAppointment = (appointmentId: string) => {
-    console.log("View appointment:", appointmentId);
+    // Navigation is handled by Link component
   };
 
   const openNewAppointmentForm = () => {
