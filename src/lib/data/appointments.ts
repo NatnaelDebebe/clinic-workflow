@@ -29,14 +29,14 @@ export function getManagedAppointments(): Appointment[] {
       } catch (e) {
         console.error("Error parsing managed appointments from localStorage", e);
         localStorage.setItem(MANAGED_APPOINTMENTS_STORAGE_KEY, JSON.stringify(initialAppointments));
-        return initialAppointments;
+        return [...initialAppointments];
       }
     } else {
       localStorage.setItem(MANAGED_APPOINTMENTS_STORAGE_KEY, JSON.stringify(initialAppointments));
-      return initialAppointments;
+      return [...initialAppointments];
     }
   }
-  return initialAppointments; // Fallback for SSR
+  return [...initialAppointments]; // Fallback for SSR, return a copy
 }
 
 export function saveManagedAppointments(appointments: Appointment[]): void {

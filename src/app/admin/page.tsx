@@ -55,23 +55,35 @@ export default function AdminDashboardPage() {
   }, [router, toast]);
 
   const refreshLabTestsView = useCallback(() => {
-    const tests = getManagedLabTests();
-    setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
+    if (typeof window !== 'undefined') { // Ensure client-side
+        const tests = getManagedLabTests(); // This function already has a guard
+        setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
+    }
   }, []);
 
   const refreshPatientStats = useCallback(() => {
-    const patients = getManagedPatients();
-    setTotalPatientsCount(patients.length);
+    if (typeof window !== 'undefined') { // Ensure client-side
+        const patients = getManagedPatients(); // This function already has a guard
+        setTotalPatientsCount(patients.length);
+    }
   }, []);
 
   const refreshTodaysAppointmentsCount = useCallback(() => {
-    const allAppointments = getManagedAppointments();
-    const today = new Date();
-    const count = allAppointments.filter(apt => {
-      const aptDate = parseISO(apt.appointmentDate);
-      return isValid(aptDate) && isToday(aptDate);
-    }).length;
-    setTodaysAppointmentsCount(count);
+    if (typeof window !== 'undefined') { // Ensure client-side
+        const allAppointments = getManagedAppointments(); // This function now has a guard
+        const today = new Date();
+        const count = allAppointments.filter(apt => {
+          if (!apt.appointmentDate) return false; // Guard against undefined date
+          try {
+            const aptDate = parseISO(apt.appointmentDate);
+            return isValid(aptDate) && isToday(aptDate);
+          } catch (e) {
+            console.error("Error parsing appointment date:", apt.appointmentDate, e);
+            return false;
+          }
+        }).length;
+        setTodaysAppointmentsCount(count);
+    }
   }, []);
 
 
@@ -90,22 +102,27 @@ export default function AdminDashboardPage() {
         refreshLabTestsView();
       }
     };
-    window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
-
+    
     const handlePatientsUpdate = () => {
       refreshPatientStats();
     };
-    window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
-
+    
     const handleAppointmentsUpdate = () => {
       refreshTodaysAppointmentsCount();
     };
-    window.addEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+        window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+        window.addEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
+    }
     
     return () => {
-      window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
-      window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
-      window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+        window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+        window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
+      }
     };
   }, [currentUser, refreshLabTestsView, refreshPatientStats, refreshTodaysAppointmentsCount]);
 
@@ -256,5 +273,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
-    
