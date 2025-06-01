@@ -20,8 +20,8 @@ const navItems = [
   { href: '/admin/manage-lab-tests', icon: ListChecks, label: 'Manage Lab Tests', roles: ['admin'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
   { href: '/admin/ai-tools', icon: UserSquare, label: 'AI Comms Tool', roles: ['receptionist'] },
-  { href: '/admin/reports', icon: BarChart3, label: 'Reports', roles: ['admin'] },
-  { href: '/admin/settings', icon: Settings, label: 'Settings', roles: ['admin'] },
+  // { href: '/admin/reports', icon: BarChart3, label: 'Reports', roles: ['admin'] }, // Reports temporarily hidden
+  // { href: '/admin/settings', icon: Settings, label: 'Settings', roles: ['admin'] }, // Settings temporarily hidden
 ];
 
 const getInitials = (name: string) => {
@@ -41,6 +41,7 @@ export default function AdminSidebar() {
   useEffect(() => {
     setIsClient(true);
     // This effect runs once on mount to initialize currentUser from localStorage
+    // It performs basic validation. Stricter validation and redirects are handled by page components.
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
@@ -64,19 +65,7 @@ export default function AdminSidebar() {
         setCurrentUser(null); // No user in storage
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array: runs once on mount
-
-  // This separate effect handles redirection if currentUser is null AND not on login page
-  // This addresses cases where localStorage might be cleared by another tab or an error.
-  useEffect(() => {
-    if (isClient && !currentUser && pathname !== '/') {
-        // If after initial load, currentUser is still null (e.g. cleared by another process or bad initial state)
-        // and we are not on the login page, redirect to login.
-        // This prevents trying to render protected content without a user.
-        router.push('/');
-    }
-  }, [isClient, currentUser, pathname, router]);
 
 
   const handleLogout = () => {
@@ -98,12 +87,16 @@ export default function AdminSidebar() {
 
   if (pathname === '/') return null; // Don't show sidebar on login page
 
+  // If currentUser is not yet set, we show a minimal sidebar or loading state.
+  // Page components are responsible for redirecting if authentication is strictly required for them.
   if (!currentUser) {
-      // This state can be brief if redirecting, or if initial check found no user.
-      // It's important not to try rendering user-specific content here.
       return (
           <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">
               <div>Authenticating...</div>
+               <Button variant="outline" onClick={() => router.push('/')} className="w-full">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Go to Login
+              </Button>
           </aside>
       );
   }
