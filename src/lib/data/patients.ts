@@ -25,9 +25,11 @@ export interface PatientLabRequest {
   testId: string; // ID of the test from availableLabTests
   testName: string;
   requestedDate: string;
-  status: 'Pending' | 'Completed' | 'Cancelled';
+  status: 'Pending Payment' | 'Pending' | 'Completed' | 'Cancelled'; // Added 'Pending Payment'
   results?: string; // Optional field for results
   requestedBy?: string; // Doctor's name or ID
+  priceAtTimeOfRequest?: number; // Price at the time of request
+  patientName?: string; // Added for easier display in billing/lab request views
 }
 
 export interface Patient {
@@ -57,6 +59,7 @@ export const initialPatients: Patient[] = [
 ];
 
 const MANAGED_PATIENTS_STORAGE_KEY = 'managedPatients';
+export const PATIENTS_UPDATED_EVENT = 'patientsUpdated'; // Export event name
 
 export function getManagedPatients(): Patient[] {
   if (typeof window !== 'undefined') {
@@ -106,5 +109,6 @@ export function getManagedPatients(): Patient[] {
 export function saveManagedPatients(patients: Patient[]): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(MANAGED_PATIENTS_STORAGE_KEY, JSON.stringify(patients));
+    window.dispatchEvent(new CustomEvent(PATIENTS_UPDATED_EVENT)); // Dispatch event
   }
 }

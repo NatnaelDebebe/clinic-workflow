@@ -12,8 +12,9 @@ import type { UserRole } from '@/lib/data/users';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest, getManagedLabTests } from '@/lib/data/labTests';
+import { PATIENTS_UPDATED_EVENT, getManagedPatients } from '@/lib/data/patients'; // Import patient data functions
 
-// Sample data for upcoming appointments
+// Sample data for upcoming appointments (can be made dynamic later)
 const upcomingAppointments = [
   { id: '1', patientName: 'Ethan Carter', date: '2024-07-20', time: '10:00 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
   { id: '2', patientName: 'Olivia Bennett', date: '2024-07-20', time: '11:30 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
@@ -26,8 +27,11 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string } | null>(null);
+  
   const [labTestsCatalog, setLabTestsCatalog] = useState<AdminLabTest[]>([]);
   const [labTestSearchTerm, setLabTestSearchTerm] = useState('');
+  
+  const [totalPatientsCount, setTotalPatientsCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -48,28 +52,45 @@ export default function AdminDashboardPage() {
   }, [router, toast]);
 
   const refreshLabTestsView = useCallback(() => {
-    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
-      const tests = getManagedLabTests(); // Direct read from localStorage
-      setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
-    } else {
-      setLabTestsCatalog([]);
-    }
-  }, [currentUser]);
+    const tests = getManagedLabTests();
+    setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
+  }, []);
+
+  const refreshPatientStats = useCallback(() => {
+    const patients = getManagedPatients();
+    setTotalPatientsCount(patients.length);
+  }, []);
 
   useEffect(() => {
-    // Initial load based on currentUser
-    refreshLabTestsView();
+    if (currentUser) {
+      // Initial load for patient stats
+      refreshPatientStats();
 
-    // Listen for updates triggered by changes in localStorage
+      // Initial load for lab tests if user is admin or receptionist
+      if (currentUser.role === 'admin' || currentUser.role === 'receptionist') {
+        refreshLabTestsView();
+      }
+    }
+
+    // Listen for lab tests updates
     const handleLabTestsUpdate = () => {
-      refreshLabTestsView();
+      if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
+        refreshLabTestsView();
+      }
     };
-
     window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+
+    // Listen for patient updates
+    const handlePatientsUpdate = () => {
+      refreshPatientStats();
+    };
+    window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    
     return () => {
       window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
+      window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
     };
-  }, [refreshLabTestsView]); // refreshLabTestsView depends on currentUser
+  }, [currentUser, refreshLabTestsView, refreshPatientStats]);
 
   const handleLabTestSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setLabTestSearchTerm(event.target.value.toLowerCase());
@@ -101,7 +122,9 @@ export default function AdminDashboardPage() {
             <CardTitle className="text-sm font-medium text-foreground">Total Patients</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">250</div>
+            <div className="text-2xl font-bold text-foreground">
+              {totalPatientsCount !== null ? totalPatientsCount : 'Loading...'}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -109,7 +132,7 @@ export default function AdminDashboardPage() {
             <CardTitle className="text-sm font-medium text-foreground">Appointments Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">15</div>
+            <div className="text-2xl font-bold text-foreground">15</div> {/* Static for now */}
           </CardContent>
         </Card>
         <Card>
@@ -117,7 +140,7 @@ export default function AdminDashboardPage() {
             <CardTitle className="text-sm font-medium text-foreground">Revenue This Month</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">$12,500</div>
+            <div className="text-2xl font-bold text-foreground">$12,500</div> {/* Static for now */}
           </CardContent>
         </Card>
       </div>
