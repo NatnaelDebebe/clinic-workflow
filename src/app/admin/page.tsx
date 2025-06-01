@@ -13,28 +13,20 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest, getManagedLabTests } from '@/lib/data/labTests';
 import { PATIENTS_UPDATED_EVENT, getManagedPatients } from '@/lib/data/patients';
-import { APPOINTMENTS_UPDATED_EVENT, getManagedAppointments, type Appointment } from '@/lib/data/appointments';
-import { isToday, parseISO, isValid } from 'date-fns';
-
-// Sample data for upcoming appointments table (remains static as per current scope)
-const upcomingAppointmentsTableData = [
-  { id: '1', patientName: 'Ethan Carter', date: '2024-07-20', time: '10:00 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
-  { id: '2', patientName: 'Olivia Bennett', date: '2024-07-20', time: '11:30 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
-  { id: '3', patientName: 'Noah Thompson', date: '2024-07-20', time: '02:00 PM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
-  { id: '4', patientName: 'Sophia Evans', date: '2024-07-21', time: '09:00 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
-  { id: '5', patientName: 'Liam Foster', date: '2024-07-21', time: '10:30 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
-];
+// import { APPOINTMENTS_UPDATED_EVENT, getManagedAppointments, type Appointment } from '@/lib/data/appointments'; // Removed
+// import { isToday, parseISO, isValid } from 'date-fns'; // Removed if only used for appointments
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id?: string } | null>(null);
   
   const [labTestsCatalog, setLabTestsCatalog] = useState<AdminLabTest[]>([]);
   const [labTestSearchTerm, setLabTestSearchTerm] = useState('');
   
   const [totalPatientsCount, setTotalPatientsCount] = useState<number | null>(null);
-  const [todaysAppointmentsCount, setTodaysAppointmentsCount] = useState<number | null>(null);
+  // const [todaysAppointmentsCount, setTodaysAppointmentsCount] = useState<number | null>(null); // Removed
+  // const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]); // Removed
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -55,42 +47,26 @@ export default function AdminDashboardPage() {
   }, [router, toast]);
 
   const refreshLabTestsView = useCallback(() => {
-    if (typeof window !== 'undefined') { // Ensure client-side
-        const tests = getManagedLabTests(); // This function already has a guard
+    if (typeof window !== 'undefined') { 
+        const tests = getManagedLabTests(); 
         setLabTestsCatalog(tests.sort((a, b) => a.name.localeCompare(b.name)));
     }
   }, []);
 
   const refreshPatientStats = useCallback(() => {
-    if (typeof window !== 'undefined') { // Ensure client-side
-        const patients = getManagedPatients(); // This function already has a guard
+    if (typeof window !== 'undefined') { 
+        const patients = getManagedPatients(); 
         setTotalPatientsCount(patients.length);
     }
   }, []);
 
-  const refreshTodaysAppointmentsCount = useCallback(() => {
-    if (typeof window !== 'undefined') { // Ensure client-side
-        const allAppointments = getManagedAppointments(); // This function now has a guard
-        const today = new Date();
-        const count = allAppointments.filter(apt => {
-          if (!apt.appointmentDate) return false; // Guard against undefined date
-          try {
-            const aptDate = parseISO(apt.appointmentDate);
-            return isValid(aptDate) && isToday(aptDate);
-          } catch (e) {
-            console.error("Error parsing appointment date:", apt.appointmentDate, e);
-            return false;
-          }
-        }).length;
-        setTodaysAppointmentsCount(count);
-    }
-  }, []);
-
+  // Removed refreshTodaysAppointmentsCount and refreshUpcomingAppointments
 
   useEffect(() => {
     if (currentUser) {
       refreshPatientStats();
-      refreshTodaysAppointmentsCount();
+      // refreshTodaysAppointmentsCount(); // Removed
+      // refreshUpcomingAppointments(); // Removed
 
       if (currentUser.role === 'admin' || currentUser.role === 'receptionist') {
         refreshLabTestsView();
@@ -107,24 +83,22 @@ export default function AdminDashboardPage() {
       refreshPatientStats();
     };
     
-    const handleAppointmentsUpdate = () => {
-      refreshTodaysAppointmentsCount();
-    };
+    // Removed handleAppointmentsUpdate
 
     if (typeof window !== 'undefined') {
         window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
         window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
-        window.addEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
+        // window.addEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate); // Removed
     }
     
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
         window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
-        window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
+        // window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate); // Removed
       }
     };
-  }, [currentUser, refreshLabTestsView, refreshPatientStats, refreshTodaysAppointmentsCount]);
+  }, [currentUser, refreshLabTestsView, refreshPatientStats]); // Removed appointment refreshers from dependencies
 
   const handleLabTestSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setLabTestSearchTerm(event.target.value.toLowerCase());
@@ -150,7 +124,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6"> {/* Adjusted grid cols after removing one card */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-foreground">Total Patients</CardTitle>
@@ -161,16 +135,7 @@ export default function AdminDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-foreground">Appointments Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">
-              {todaysAppointmentsCount !== null ? todaysAppointmentsCount : 'Loading...'}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Card for Appointments Today removed */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-foreground">Revenue This Month</CardTitle>
@@ -182,42 +147,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-1"> {/* Main content area */}
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-xl md:text-2xl font-bold font-headline">Upcoming Appointments</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                <TableHeader>
-                    <TableRow>
-                    <TableHead className="text-foreground font-medium">Patient Name</TableHead>
-                    <TableHead className="text-foreground font-medium">Date</TableHead>
-                    <TableHead className="text-foreground font-medium">Time</TableHead>
-                    <TableHead className="text-foreground font-medium">Doctor</TableHead>
-                    <TableHead className="text-foreground font-medium">Status</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {upcomingAppointmentsTableData.map((appointment) => (
-                    <TableRow key={appointment.id}>
-                        <TableCell className="font-medium text-foreground">{appointment.patientName}</TableCell>
-                        <TableCell className="text-muted-foreground">{appointment.date}</TableCell>
-                        <TableCell className="text-muted-foreground">{appointment.time}</TableCell>
-                        <TableCell className="text-muted-foreground">{appointment.doctor}</TableCell>
-                        <TableCell>
-                        <Badge variant="secondary">{appointment.status}</Badge>
-                        </TableCell>
-                    </TableRow>
-                    ))}
-                </TableBody>
-                </Table>
-                {upcomingAppointmentsTableData.length === 0 && (
-                    <div className="text-center py-10 text-muted-foreground">
-                        No upcoming appointments.
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+        {/* Upcoming Appointments Table removed */}
 
         {showLabTestCatalog && (
            <Card>

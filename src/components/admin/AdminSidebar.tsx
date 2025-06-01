@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Home, Users, CalendarDays, DollarSign, BarChart3, Settings, FlaskConical, NotebookPen, LogOut, UserSquare, ListChecks } from 'lucide-react';
+import { Home, Users, DollarSign, BarChart3, Settings, FlaskConical, LogOut, UserSquare, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/data/users';
 import { useEffect, useState } from 'react';
@@ -14,9 +14,9 @@ const navItems = [
   { href: '/admin', icon: Home, label: 'Dashboard', roles: ['admin', 'doctor', 'receptionist', 'lab_tech', 'patient'] },
   { href: '/admin/users', icon: Users, label: 'User Management', roles: ['admin'] },
   { href: '/admin/patients', icon: Users, label: 'Patients', roles: ['admin', 'receptionist', 'doctor'] },
-  { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] },
-  { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] },
-  { href: '/admin/schedule', icon: CalendarDays, label: 'Schedule', roles: ['receptionist', 'doctor'] },
+  // { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] }, // Removed
+  // { href: '/admin/my-appointments', icon: NotebookPen, label: 'My Appointments', roles: ['doctor'] }, // Removed
+  { href: '/admin/schedule', icon: Users, label: 'Schedule', roles: ['receptionist', 'doctor'] }, // Icon changed from CalendarDays for consistency, or could be removed if schedule is appointment-dependent
   { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
   { href: '/admin/manage-lab-tests', icon: ListChecks, label: 'Manage Lab Tests', roles: ['admin'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
@@ -35,7 +35,7 @@ const getInitials = (name: string) => {
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string} | null>(null);
+  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string; id?: string} | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
