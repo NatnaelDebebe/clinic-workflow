@@ -2,7 +2,8 @@
 'use client';
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback }
+from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -122,7 +123,7 @@ const AppointmentTable = ({ appointments, onActionClick }: { appointments: Appoi
 
 export default function AdminAppointmentsPage() {
   const router = useRouter();
-  const pathname = usePathname();
+  // const pathname = usePathname(); // Keep for potential future use if needed, but not for main auth effect
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string; role: UserRole; username: string; } | null>(null);
 
@@ -142,7 +143,7 @@ export default function AdminAppointmentsPage() {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (!storedUser) {
-        router.push('/'); // No user stored, redirect to login
+        router.push('/');
         return;
       }
 
@@ -150,24 +151,20 @@ export default function AdminAppointmentsPage() {
         const userData = JSON.parse(storedUser) as { id: string; fullName: string; role: UserRole; username: string; };
 
         if (!userData || !userData.id || !userData.role) {
-          console.error("Invalid user data structure in localStorage (missing id or role) on /admin/appointments page.");
-          localStorage.removeItem('loggedInUser'); // Clear invalid user data
-          router.push('/'); // Redirect to login
+          console.error("Invalid user data structure in localStorage on /admin/appointments page (missing id or role).");
+          localStorage.removeItem('loggedInUser');
+          router.push('/');
           return;
         }
 
-        // User data is preliminarily valid (has id and role)
-        // Now check role-based access for this specific page
         if (!['admin', 'receptionist', 'doctor'].includes(userData.role)) {
           toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page." });
-          router.push('/admin'); // Redirect to a general admin page, not login
+          router.push('/admin');
           return;
         }
-
-        // If all checks pass, set the current user
+        
         setCurrentUser(userData);
 
-        // Setup form data - can be done once currentUser is confirmed for the page
         setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
         setDoctorsForForm(
           getManagedUsers()
@@ -176,12 +173,12 @@ export default function AdminAppointmentsPage() {
         );
 
       } catch (e) {
-        console.error("Error parsing current user on /admin/appointments", e);
-        localStorage.removeItem('loggedInUser'); // Clear stored item on error
-        router.push('/'); // Redirect to login on parsing error
+        console.error("Error parsing current user on /admin/appointments page.", e);
+        localStorage.removeItem('loggedInUser');
+        router.push('/');
       }
     }
-  }, [router, toast, pathname]);
+  }, [router, toast]); // Removed pathname from dependencies
 
 
   const fetchAppointments = useCallback(() => {
@@ -193,11 +190,10 @@ export default function AdminAppointmentsPage() {
     if (currentUser.role === 'doctor') {
       appointments = appointments.filter(apt => apt.doctorId === currentUser.id);
     }
-    // Ensure dates are valid before sorting, or provide a fallback
     setAllAppointments(appointments.sort((a,b) => {
         const dateA = parseISO(a.createdAt);
         const dateB = parseISO(b.createdAt);
-        if (!isValid(dateA) || !isValid(dateB)) return 0; // or handle error appropriately
+        if (!isValid(dateA) || !isValid(dateB)) return 0;
         return dateB.getTime() - dateA.getTime();
     }));
   }, [currentUser]);
@@ -210,9 +206,10 @@ export default function AdminAppointmentsPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.addEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
+      const handleUpdate = () => fetchAppointments();
+      window.addEventListener(APPOINTMENTS_UPDATED_EVENT, handleUpdate);
       return () => {
-        window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
+        window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, handleUpdate);
       };
     }
   }, [fetchAppointments]);
@@ -483,4 +480,4 @@ export default function AdminAppointmentsPage() {
     </div>
   );
 }
-
+    
