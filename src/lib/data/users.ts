@@ -34,21 +34,35 @@ const MANAGED_USERS_STORAGE_KEY = 'managedUsers';
 export function getManagedUsers(): User[] {
   if (typeof window !== 'undefined') {
     const storedUsers = localStorage.getItem(MANAGED_USERS_STORAGE_KEY);
+    let usersToReturn: User[];
+
+    const reinitializeAndSave = () => {
+      console.warn("Re-initializing managedUsers in localStorage with initialUsers.");
+      usersToReturn = [...initialUsers]; // Create a fresh copy
+      localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(usersToReturn));
+      return usersToReturn;
+    };
+
     if (storedUsers) {
       try {
-        return JSON.parse(storedUsers);
+        const parsedUsers = JSON.parse(storedUsers) as User[];
+        // Deep validation: check if it's an array and if all users have essential properties
+        if (Array.isArray(parsedUsers) && parsedUsers.every(u => u && u.id && u.role && u.username && typeof u.status === 'string')) {
+          usersToReturn = parsedUsers;
+        } else {
+          usersToReturn = reinitializeAndSave();
+        }
       } catch (e) {
-        console.error("Error parsing managed users from localStorage", e);
-        // Fallback to initialUsers if parsing fails
-        localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(initialUsers));
-        return initialUsers;
+        console.error("Error parsing managed users from localStorage, re-initializing.", e);
+        usersToReturn = reinitializeAndSave();
       }
     } else {
-      localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(initialUsers));
-      return initialUsers;
+      console.log("No managed users found in localStorage, initializing with initialUsers.");
+      usersToReturn = reinitializeAndSave();
     }
+    return usersToReturn;
   }
-  return initialUsers; // Fallback for SSR or environments without localStorage
+  return [...initialUsers]; // Fallback for SSR, return a copy
 }
 
 export function saveManagedUsers(users: User[]): void {
@@ -56,4 +70,3 @@ export function saveManagedUsers(users: User[]): void {
     localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(users));
   }
 }
-

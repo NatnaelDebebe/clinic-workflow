@@ -16,8 +16,6 @@ const navItems = [
   { href: '/admin', icon: Home, label: 'Dashboard', roles: ['admin', 'doctor', 'receptionist', 'lab_tech', 'patient'] },
   { href: '/admin/users', icon: Users, label: 'User Management', roles: ['admin'] },
   { href: '/admin/patients', icon: Users, label: 'Patients', roles: ['admin', 'receptionist', 'doctor'] },
-  // { href: '/admin/appointments', icon: CalendarDays, label: 'Appointments', roles: ['admin', 'receptionist', 'doctor'] }, // Appointment link removed
-  // { href: '/admin/my-appointments', icon: CalendarCheck, label: 'My Appointments', roles: ['doctor'] }, // My Appointment link removed
   { href: '/admin/lab-requests', icon: FlaskConical, label: 'Lab Requests', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
   { href: '/admin/manage-lab-tests', icon: ListChecks, label: 'Manage Lab Tests', roles: ['admin'] },
   { href: '/admin/billing', icon: DollarSign, label: 'Billing', roles: ['admin', 'receptionist'] },
@@ -37,7 +35,7 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string; id?: string} | null>(null);
+  const [currentUser, setCurrentUser] = useState<{fullName: string; role: UserRole; username: string; id: string} | null>(null); // Ensure id is string
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -46,35 +44,33 @@ export default function AdminSidebar() {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id?: string };
-          // Basic check: ensure userData is an object and has a role. Deeper validation (like presence of ID) is on pages.
-          if (userData && typeof userData === 'object' && userData.role && validUserRoles.includes(userData.role)) {
+          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
+          if (userData && typeof userData === 'object' && userData.id && userData.role && validUserRoles.includes(userData.role)) {
             setCurrentUser(userData);
           } else {
-            // If basic structure is wrong, clear and redirect.
             toast({ variant: "destructive", title: "Session Error", description: "Invalid user data in session. Please log in again." });
             localStorage.removeItem('loggedInUser');
             if (pathname !== '/') router.push('/');
           }
         } catch (error) {
           console.error("Failed to parse user data from localStorage in Sidebar", error);
+          toast({ variant: "destructive", title: "Session Error", description: "Could not read session. Please log in again." });
           localStorage.removeItem('loggedInUser');
           if (pathname !== '/') router.push('/');
         }
       } else {
-        // No user data found, redirect if not on login page.
         if (pathname !== '/') {
           router.push('/');
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount. Router and toast are stable, pathname check is internal to effect.
+  }, [router, pathname, toast]); // Dependencies: router, pathname, toast
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('loggedInUser');
     }
+    toast({ title: "Logged Out", description: "You have been successfully logged out." });
     router.push('/');
   };
   
@@ -86,10 +82,8 @@ export default function AdminSidebar() {
     );
   }
   
-  // Don't render sidebar at all on the login page
   if (pathname === '/') return null;
 
-  // If still no current user after client check and not on login, means redirect should have happened or is in progress.
   if (!currentUser && pathname !== '/') {
       return (
           <aside className="w-80 bg-card text-card-foreground p-4 flex flex-col justify-between border-r border-border">

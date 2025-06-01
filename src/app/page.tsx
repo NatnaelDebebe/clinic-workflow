@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
-import { getManagedUsers, type User } from '@/lib/data/users'; // Updated import
+import { getManagedUsers, type User, type UserRole, userRoles as validUserRoles } from '@/lib/data/users';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,9 +18,22 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const loggedInUser = localStorage.getItem('loggedInUser');
-      if (loggedInUser) {
-        router.push('/admin');
+      const storedUser = localStorage.getItem('loggedInUser');
+      if (storedUser) {
+        try {
+          const userData = JSON.parse(storedUser) as { id: string; role: UserRole; fullName: string; username: string };
+          // Validate before redirecting to prevent loops
+          if (userData && userData.id && userData.role && validUserRoles.includes(userData.role)) {
+            router.push('/admin');
+          } else {
+            // Invalid session found, clear it
+            localStorage.removeItem('loggedInUser');
+          }
+        } catch (e) {
+          // Parsing failed, clear it
+          console.error("Error parsing stored user on login page mount:", e);
+          localStorage.removeItem('loggedInUser');
+        }
       }
     }
   }, [router]);
@@ -30,12 +43,23 @@ export default function LoginPage() {
     event.preventDefault();
     setIsLoading(true);
 
-    const currentUsers = getManagedUsers(); // Load users from localStorage
+    const currentUsers = getManagedUsers();
     const user = currentUsers.find(u => u.username === email && u.status === 'Active');
 
-    if (user && user.password === password) { 
+    if (user && user.password === password) {
+      if (!user.id || !user.role) { // Critical check for essential user data
+        toast({
+          variant: "destructive",
+          title: "Login Error",
+          description: "User data is incomplete (missing ID or role). Please contact admin.",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('loggedInUser', JSON.stringify({
+          id: user.id,
           fullName: user.fullName,
           username: user.username,
           role: user.role,
