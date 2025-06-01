@@ -30,7 +30,7 @@ import { getManagedPatients } from '@/lib/data/patients';
 import type { Appointment } from '@/lib/data/appointments';
 import { getManagedAppointments, saveManagedAppointments, APPOINTMENTS_UPDATED_EVENT } from '@/lib/data/appointments';
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 const AppointmentSchema = z.object({
   patientId: z.string().min(1, "Patient is required"),
@@ -122,6 +122,7 @@ const AppointmentTable = ({ appointments, onActionClick }: { appointments: Appoi
 
 export default function AdminAppointmentsPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string; role: UserRole; username: string; } | null>(null);
   
@@ -138,32 +139,37 @@ export default function AdminAppointmentsPage() {
   });
 
   const fetchAppointments = useCallback(() => {
-    if (!currentUser) return; // Ensure currentUser is available
+    if (!currentUser || !currentUser.id) {
+        setAllAppointments([]); // Clear appointments if no user or user.id
+        return;
+    }
     let appointments = getManagedAppointments();
     if (currentUser.role === 'doctor') {
       appointments = appointments.filter(apt => apt.doctorId === currentUser.id);
     }
-    // Sort by creation date descending for initial load, tab filtering will re-sort
     setAllAppointments(appointments.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
   }, [currentUser]);
 
-  // Effect for setting up current user and initial form data (patients & doctors)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser);
-          setCurrentUser(userData); // Set current user
-           if (!['admin', 'receptionist', 'doctor'].includes(userData.role)) {
-             toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
-             router.push('/admin');
-             return;
-           }
-        } catch (e) { console.error("Error parsing current user", e); router.push('/'); return; }
+          const userData = JSON.parse(storedUser) as { id: string; fullName: string; role: UserRole; username: string; };
+          if (userData && userData.id && userData.role) {
+            setCurrentUser(userData);
+            if (!['admin', 'receptionist', 'doctor'].includes(userData.role)) {
+              toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
+              router.push('/admin');
+            }
+          } else {
+            console.error("Invalid user data structure in localStorage on /admin/appointments page.");
+            localStorage.removeItem('loggedInUser');
+            router.push('/');
+          }
+        } catch (e) { console.error("Error parsing current user on /admin/appointments", e); router.push('/'); }
       } else {
         router.push('/');
-        return;
       }
     }
     
@@ -173,26 +179,22 @@ export default function AdminAppointmentsPage() {
         .filter(u => u.role === 'doctor' && u.status === 'Active')
         .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
     );
-  }, [router, toast]); // Runs once on mount or if router/toast references change (they generally don't)
+  }, [router, toast, pathname]);
 
-  // Effect for fetching appointments when currentUser changes or fetchAppointments callback is redefined
   useEffect(() => {
     if (currentUser) {
       fetchAppointments();
     }
   }, [currentUser, fetchAppointments]);
 
-  // Effect for managing the APPOINTMENTS_UPDATED_EVENT listener
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // The fetchAppointments callback already depends on currentUser,
-      // so it will be the correct version when this effect re-runs.
       window.addEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
       return () => {
         window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
       };
     }
-  }, [fetchAppointments]); // Re-binds if fetchAppointments changes
+  }, [fetchAppointments]);
 
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
