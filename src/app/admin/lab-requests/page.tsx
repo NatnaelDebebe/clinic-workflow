@@ -2,7 +2,7 @@
 'use client';
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { getManagedPatients, saveManagedPatients, type PatientLabRequest, type Patient, PATIENTS_UPDATED_EVENT } from '@/lib/data/patients'; // Added PATIENTS_UPDATED_EVENT
+import { getManagedPatients, saveManagedPatients, type PatientLabRequest, type Patient, PATIENTS_UPDATED_EVENT } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
 import { userRoles as validUserRoles } from '@/lib/data/users'; 
 import { useToast } from "@/hooks/use-toast";
@@ -138,7 +138,7 @@ const LabRequestTable = ({
 export default function AdminLabRequestsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id?: string; } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id: string; } | null>(null);
   
   const [activeTab, setActiveTab] = useState<PatientLabRequest['status'] | 'all'>("all");
   const [searchTerm, setSearchTerm] = useState('');
@@ -156,9 +156,9 @@ export default function AdminLabRequestsPage() {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id?:string };
+          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
           
-          if (!userData || !userData.role || !validUserRoles.includes(userData.role) || !userData.id) {
+          if (!userData || !userData.role || !validUserRoles.includes(userData.role) || !userData.id || typeof userData.id !== 'string') {
             toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data. Please log in again." });
             localStorage.removeItem('loggedInUser');
             router.push('/');
@@ -192,12 +192,11 @@ export default function AdminLabRequestsPage() {
         return;
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
+  }, [router, toast]);
 
 
   const loadLabRequests = useCallback(() => {
-    if (!currentUser) return; 
+    if (!currentUser || !currentUser.id) return; 
 
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
@@ -214,12 +213,11 @@ export default function AdminLabRequestsPage() {
   }, [currentUser]);
 
   useEffect(() => { 
-    if (currentUser) { 
+    if (currentUser && currentUser.id) { 
       loadLabRequests();
     }
-    // Event listener for real-time updates
     const handlePatientsUpdate = () => {
-      if (currentUser) loadLabRequests(); // Check currentUser before loading
+      if (currentUser && currentUser.id) loadLabRequests(); 
     };
     window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
     return () => {
@@ -256,7 +254,7 @@ export default function AdminLabRequestsPage() {
   };
 
   const onResultsSubmit: SubmitHandler<LabResultFormData> = (data) => {
-    if (!currentRequestForResults || !currentUser || currentUser.role !== 'lab_tech') return;
+    if (!currentRequestForResults || !currentUser || currentUser.role !== 'lab_tech' || !currentUser.id) return;
 
     const patients = getManagedPatients();
     const patientIndex = patients.findIndex(p => p.id === currentRequestForResults.patientId);
@@ -274,7 +272,7 @@ export default function AdminLabRequestsPage() {
     
     patient.labRequests[requestIndex].status = 'Completed';
     patient.labRequests[requestIndex].resultsSummary = data.resultsSummary;
-    patient.labRequests[requestIndex].resultEnteredBy = currentUser.fullName;
+    patient.labRequests[requestIndex].resultEnteredBy = currentUser.fullName; // Use fullName
     patient.labRequests[requestIndex].resultDate = new Date().toISOString().split('T')[0];
     
     patients[patientIndex] = patient;
@@ -294,7 +292,7 @@ export default function AdminLabRequestsPage() {
     return TABS_CONFIG.filter(tab => tab.roles.includes(currentUser.role));
   }, [currentUser]);
 
-  if (!currentUser) {
+  if (!currentUser || !currentUser.id) {
     return <div className="flex flex-1 justify-center items-center p-8">Loading or unauthorized...</div>;
   }
 
@@ -379,4 +377,3 @@ export default function AdminLabRequestsPage() {
     </div>
   );
 }
-
