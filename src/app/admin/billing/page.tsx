@@ -2,12 +2,13 @@
 'use client';
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from '@/components/ui/card';
-import { getManagedPatients, saveManagedPatients, type Patient, type PatientLabRequest } from '@/lib/data/patients';
+import { getManagedPatients, saveManagedPatients, type Patient, type PatientLabRequest, PATIENTS_UPDATED_EVENT } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
+import { userRoles as validUserRoles } from '@/lib/data/users';
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -16,36 +17,51 @@ import { Search } from 'lucide-react';
 
 interface LabRequestWithPatientInfo extends PatientLabRequest {
   patientId: string;
-  patientName: string; 
+  // patientName is already part of PatientLabRequest
 }
 
 export default function AdminBillingPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; id: string; } | null>(null);
   const [allLabRequests, setAllLabRequests] = useState<LabRequestWithPatientInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          setCurrentUser(userData);
-          if (userData.role !== 'receptionist' && userData.role !== 'admin') {
-            toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page." });
-            router.push('/admin');
-          }
-        } catch (e) { console.error("Error parsing current user", e); router.push('/'); }
-      } else {
+      if (!storedUser) {
+        toast({ variant: "destructive", title: "Authentication Required", description: "Please log in." });
         router.push('/');
+        return;
+      }
+      try {
+        const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; id: string; };
+        if (!userData || !userData.id || !validUserRoles.includes(userData.role)) {
+          toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data." });
+          localStorage.removeItem('loggedInUser');
+          router.push('/');
+          return;
+        }
+        if (userData.role !== 'receptionist' && userData.role !== 'admin') {
+          toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page." });
+          router.push('/admin');
+          return;
+        }
+        setCurrentUser(userData);
+      } catch (e) { 
+        console.error("Error parsing current user", e); 
+        localStorage.removeItem('loggedInUser');
+        router.push('/'); 
+        return;
       }
     }
-    loadLabRequests();
-  }, [router, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
-  const loadLabRequests = () => {
+  const loadBillingLabRequests = useCallback(() => {
+    if(!currentUser || !currentUser.id) return; // Ensure currentUser is set
+
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
@@ -54,13 +70,26 @@ export default function AdminBillingPage() {
           requests.push({
             ...req,
             patientId: patient.id,
-            patientName: patient.name, // Already available due to previous changes
+            // patientName is already in req from getManagedPatients data hydration
           });
         }
       });
     });
     setAllLabRequests(requests.sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()));
-  };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if(currentUser) { // Load requests once currentUser is set
+      loadBillingLabRequests();
+    }
+    const handlePatientsUpdate = () => {
+      if(currentUser) loadBillingLabRequests();
+    };
+    window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    return () => {
+      window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    };
+  }, [currentUser, loadBillingLabRequests]);
   
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value.toLowerCase());
@@ -69,7 +98,7 @@ export default function AdminBillingPage() {
   const filteredRequests = useMemo(() => {
     if (!searchTerm) return allLabRequests;
     return allLabRequests.filter(req =>
-      req.patientName.toLowerCase().includes(searchTerm) ||
+      (req.patientName && req.patientName.toLowerCase().includes(searchTerm)) ||
       req.testName.toLowerCase().includes(searchTerm)
     );
   }, [allLabRequests, searchTerm]);
@@ -93,9 +122,9 @@ export default function AdminBillingPage() {
 
     patient.labRequests[requestIndex].status = 'Pending';
     patients[patientIndex] = patient;
-    saveManagedPatients(patients);
+    saveManagedPatients(patients); // This will trigger the PATIENTS_UPDATED_EVENT
     toast({ title: "Payment Confirmed", description: `Lab request for ${patient.labRequests[requestIndex].testName} marked as pending processing.` });
-    loadLabRequests(); // Refresh the list
+    // No need to call loadBillingLabRequests directly, event listener will handle it.
   };
 
   if (!currentUser || (currentUser.role !== 'receptionist' && currentUser.role !== 'admin')) {
@@ -168,3 +197,5 @@ export default function AdminBillingPage() {
     </div>
   );
 }
+
+    

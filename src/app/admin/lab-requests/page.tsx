@@ -25,7 +25,7 @@ import { z } from "zod";
 
 interface LabRequestWithPatientInfo extends PatientLabRequest {
   patientId: string;
-  patientName: string;
+  // patientName is already part of PatientLabRequest
 }
 
 const LabResultSchema = z.object({
@@ -41,30 +41,30 @@ const TABS_CONFIG: Array<{value: PatientLabRequest['status'] | 'all', label: str
   { value: 'Cancelled', label: 'Cancelled', roles: ['admin', 'doctor', 'receptionist'] },
 ];
 
-const getStatusVariant = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'pending payment':
+const getStatusVariant = (status: PatientLabRequest['status']) => {
+  switch (status) {
+    case 'Pending Payment':
       return 'secondary';
-    case 'pending':
+    case 'Pending':
       return 'default';
-    case 'completed':
+    case 'Completed':
       return 'outline';
-    case 'cancelled':
+    case 'Cancelled':
         return 'destructive';
     default:
       return 'secondary';
   }
 };
 
-const getStatusClassName = (status: string) => {
-    switch (status.toLowerCase()) {
-        case 'pending payment':
+const getStatusClassName = (status: PatientLabRequest['status']) => {
+    switch (status) {
+        case 'Pending Payment':
             return 'bg-yellow-500/20 text-yellow-700';
-        case 'pending':
+        case 'Pending':
             return 'bg-blue-500/20 text-blue-700';
-        case 'completed':
+        case 'Completed':
             return 'bg-green-500/20 text-green-700';
-        case 'cancelled':
+        case 'Cancelled':
             return 'bg-red-500/20 text-red-700';
         default:
             return '';
@@ -75,12 +75,10 @@ const LabRequestTable = ({
   requests,
   currentUserRole,
   onEnterResults,
-  onViewDetails,
 }: {
   requests: LabRequestWithPatientInfo[],
   currentUserRole: UserRole | null,
   onEnterResults: (request: LabRequestWithPatientInfo) => void,
-  onViewDetails: (patientId: string, requestId: string) => void,
 }) => (
   <Card className="overflow-hidden">
     <Table>
@@ -103,7 +101,7 @@ const LabRequestTable = ({
             <TableCell className="text-muted-foreground">${request.priceAtTimeOfRequest?.toFixed(2) || 'N/A'}</TableCell>
             <TableCell>
               <Badge
-                variant={getStatusVariant(request.status) as any}
+                variant={getStatusVariant(request.status)}
                 className={getStatusClassName(request.status)}
               >
                 {request.status}
@@ -116,7 +114,7 @@ const LabRequestTable = ({
                   Enter Results
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={() => onViewDetails(request.patientId, request.id)} asChild>
+              <Button variant="ghost" size="icon" asChild>
                 <Link href={`/admin/patients/${request.patientId}?tab=lab_requests&requestId=${request.id}`}>
                   <Eye className="h-5 w-5 text-muted-foreground hover:text-accent" />
                   <span className="sr-only">View Details</span>
@@ -152,18 +150,17 @@ export default function AdminLabRequestsPage() {
   });
 
   useEffect(() => {
-    // This effect runs once on mount to authenticate and set up the user for this page
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (!storedUser) {
-        router.push('/'); // No user found, redirect to login
+        toast({ variant: "destructive", title: "Authentication Required", description: "Please log in." });
+        router.push('/');
         return;
       }
 
       try {
         const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
-
-        if (!userData || !userData.id || typeof userData.id !== 'string' || !userData.role || !validUserRoles.includes(userData.role)) {
+        if (!userData || !userData.id || !validUserRoles.includes(userData.role)) {
           toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data. Please log in again." });
           localStorage.removeItem('loggedInUser');
           router.push('/');
@@ -172,19 +169,17 @@ export default function AdminLabRequestsPage() {
 
         if (!['admin', 'doctor', 'lab_tech', 'receptionist'].includes(userData.role)) {
           toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
-          router.push('/admin'); // Redirect to a general admin page if role not allowed here
+          router.push('/admin');
           return;
         }
-
-        setCurrentUser(userData); // Set the current user if all checks pass
-
-        // Set activeTab based on role AFTER currentUser is set and validated
+        setCurrentUser(userData);
+        
+        // Set initial active tab based on role AFTER currentUser is validated and set
         if (userData.role === 'lab_tech') {
           setActiveTab('Pending');
         } else if (userData.role === 'receptionist') {
           setActiveTab('Pending Payment');
         } else {
-          // For admin, doctor, or other roles default to 'all' or specific logic
           setActiveTab('all');
         }
 
@@ -196,11 +191,12 @@ export default function AdminLabRequestsPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []); // Empty dependency array: run once on mount
 
 
   const loadLabRequests = useCallback(() => {
-    if (!currentUser || !currentUser.id) return;
+    // currentUser check is important here as this function can be called by event listener
+    if (typeof window === 'undefined' || !currentUser || !currentUser.id) return;
 
     const patients = getManagedPatients();
     const requests: LabRequestWithPatientInfo[] = [];
@@ -209,20 +205,22 @@ export default function AdminLabRequestsPage() {
         requests.push({
           ...req,
           patientId: patient.id,
-          patientName: patient.name,
+          patientName: patient.name, // patient.name is correct here as per Patient interface
         });
       });
     });
     setAllLabRequests(requests.sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()));
-  }, [currentUser]);
+  }, [currentUser]); // Depends on currentUser being set
 
   useEffect(() => {
-    if (currentUser && currentUser.id) { // Ensure currentUser and its ID are available
+    if (currentUser && currentUser.id) {
       loadLabRequests();
     }
-    // Setup event listener
     const handlePatientsUpdate = () => {
-      if (currentUser && currentUser.id) loadLabRequests();
+      // Ensure currentUser is still valid before reloading
+      if (currentUser && currentUser.id) {
+        loadLabRequests();
+      }
     };
     window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
     return () => {
@@ -239,6 +237,7 @@ export default function AdminLabRequestsPage() {
     let baseRequests = allLabRequests;
 
     if (currentUser?.role === 'lab_tech' && tabKey === 'all') {
+      // Lab techs see only 'Pending' and 'Completed' in their "All" view
       baseRequests = allLabRequests.filter(req => req.status === 'Pending' || req.status === 'Completed');
     } else if (tabKey !== 'all') {
       baseRequests = allLabRequests.filter(req => req.status === tabKey);
@@ -246,7 +245,7 @@ export default function AdminLabRequestsPage() {
 
     if (!searchTerm) return baseRequests;
     return baseRequests.filter(req =>
-      req.patientName.toLowerCase().includes(searchTerm) ||
+      (req.patientName && req.patientName.toLowerCase().includes(searchTerm)) ||
       req.testName.toLowerCase().includes(searchTerm)
     );
   };
@@ -254,7 +253,7 @@ export default function AdminLabRequestsPage() {
   const openResultsModal = (request: LabRequestWithPatientInfo) => {
     if (currentUser?.role !== 'lab_tech') return;
     setCurrentRequestForResults(request);
-    resetResult({ resultsSummary: request.resultsSummary || '' }); // Pre-fill if editing
+    resetResult({ resultsSummary: request.resultsSummary || '' });
     setIsResultsModalOpen(true);
   };
 
@@ -283,13 +282,17 @@ export default function AdminLabRequestsPage() {
     patients[patientIndex] = patient;
     saveManagedPatients(patients);
     toast({ title: "Lab Results Submitted", description: `Results for ${patient.labRequests[requestIndex].testName} have been submitted.` });
-    loadLabRequests();
+    
+    // Refresh local state for immediate UI update
+    setAllLabRequests(prevRequests => prevRequests.map(req => 
+        req.id === currentRequestForResults.id 
+        ? {...req, status: 'Completed', resultsSummary: data.resultsSummary, resultEnteredBy: currentUser.fullName, resultDate: new Date().toISOString().split('T')[0]} 
+        : req
+    ));
+    
     setIsResultsModalOpen(false);
     setCurrentRequestForResults(null);
-  };
-
-  const handleViewDetails = (patientId: string, requestId: string) => {
-    // Intentionally left for navigation via Link component
+    resetResult();
   };
 
   const availableTabs = useMemo(() => {
@@ -307,45 +310,42 @@ export default function AdminLabRequestsPage() {
         <h1 className="text-foreground tracking-tight text-3xl font-bold font-headline">Lab Requests</h1>
       </div>
 
-      <div className="lg:col-span-1">
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PatientLabRequest['status'] | 'all')} className="w-full">
-            <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
-              {availableTabs.map(tab => (
-                <TabsTrigger
-                  key={tab.value}
-                  value={tab.value}
-                  className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
-                >
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PatientLabRequest['status'] | 'all')} className="w-full">
+        <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
+          {availableTabs.map(tab => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
+            >
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-            <div className="mt-6 mb-6">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search by patient name or test type..."
-                  className="pl-10 h-12 rounded-xl border-input bg-card placeholder:text-muted-foreground"
-                  value={searchTerm}
-                  onChange={handleSearchChange}
-                />
-              </div>
-            </div>
-
-            {availableTabs.map(tab => (
-              <TabsContent key={tab.value} value={tab.value}>
-                <LabRequestTable
-                  requests={getFilteredRequestsForTab(tab.value)}
-                  currentUserRole={currentUser.role}
-                  onEnterResults={openResultsModal}
-                  onViewDetails={handleViewDetails}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
+        <div className="mt-6 mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search by patient name or test type..."
+              className="pl-10 h-12 rounded-xl border-input bg-card placeholder:text-muted-foreground"
+              value={searchTerm}
+              onChange={handleSearchChange}
+            />
+          </div>
         </div>
+
+        {availableTabs.map(tab => (
+          <TabsContent key={tab.value} value={tab.value}>
+            <LabRequestTable
+              requests={getFilteredRequestsForTab(tab.value)}
+              currentUserRole={currentUser.role}
+              onEnterResults={openResultsModal}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
 
       <Dialog open={isResultsModalOpen} onOpenChange={(isOpen) => {
         setIsResultsModalOpen(isOpen);
@@ -383,3 +383,4 @@ export default function AdminLabRequestsPage() {
   );
 }
 
+    

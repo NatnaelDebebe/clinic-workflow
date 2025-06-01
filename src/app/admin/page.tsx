@@ -6,8 +6,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Search, Users, FlaskConical, FileText, Link as LinkIcon } from 'lucide-react';
+import { Search, Users, FlaskConical, FileText } from 'lucide-react';
 import type { UserRole } from '@/lib/data/users';
+import { userRoles as validUserRoles } from '@/lib/data/users';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -18,7 +19,7 @@ import { Button } from '@/components/ui/button';
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id: string } | null>(null);
   
   const [labTestsCatalog, setLabTestsCatalog] = useState<AdminLabTest[]>([]);
   const [labTestSearchTerm, setLabTestSearchTerm] = useState('');
@@ -37,23 +38,32 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          setCurrentUser(userData);
-        } catch (e) {
-          console.error("Error parsing current user from localStorage on dashboard", e);
-          toast({ variant: "destructive", title: "Authentication Error", description: "Please log in again." });
+      if (!storedUser) {
+        toast({ variant: "destructive", title: "Authentication Required", description: "Please log in." });
+        router.push('/');
+        return;
+      }
+      try {
+        const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
+        if (!userData || !userData.id || !validUserRoles.includes(userData.role) ) {
+          toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data." });
+          localStorage.removeItem('loggedInUser');
           router.push('/');
+          return;
         }
-      } else {
+        setCurrentUser(userData);
+      } catch (e) {
+        console.error("Error parsing current user from localStorage on dashboard", e);
+        toast({ variant: "destructive", title: "Authentication Error", description: "Please log in again." });
+        localStorage.removeItem('loggedInUser');
         router.push('/');
       }
     }
-  }, [router, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   const refreshDashboardStats = useCallback(() => {
-    if (typeof window === 'undefined' || !currentUser) return;
+    if (typeof window === 'undefined' || !currentUser || !currentUser.id) return;
 
     const patients = getManagedPatients();
     setTotalPatientsCount(patients.length);
@@ -63,7 +73,8 @@ export default function AdminDashboardPage() {
       let completedCount = 0;
       patients.forEach(patient => {
         patient.labRequests.forEach(req => {
-          if (req.requestedBy === currentUser.fullName) {
+          // Assuming requestedBy stores the doctor's full name or ID. Using fullName for now.
+          if (req.requestedBy === currentUser.fullName) { 
             if (req.status === 'Pending Payment' || req.status === 'Pending') {
               pendingCount++;
             } else if (req.status === 'Completed') {
@@ -77,17 +88,17 @@ export default function AdminDashboardPage() {
     }
 
     if (currentUser.role === 'lab_tech') {
-      let totalCount = 0;
+      let totalReqs = 0;
       let pendingProcessing = 0;
       patients.forEach(patient => {
-        totalCount += patient.labRequests.length;
         patient.labRequests.forEach(req => {
-          if (req.status === 'Pending') {
-            pendingProcessing++;
-          }
+            totalReqs++; // Count all requests for total
+            if (req.status === 'Pending') {
+              pendingProcessing++;
+            }
         });
       });
-      setLabTechTotalRequestsCount(totalCount);
+      setLabTechTotalRequestsCount(totalReqs);
       setLabTechPendingProcessingCount(pendingProcessing);
     }
 
@@ -139,7 +150,7 @@ export default function AdminDashboardPage() {
   
   const welcomeMessage = currentUser ? `Welcome back, ${currentUser.fullName}` : 'Loading user information...';
 
-  if (!currentUser) {
+  if (!currentUser || !currentUser.id) { // Added check for currentUser.id
     return <div className="flex flex-1 justify-center items-center p-8">Loading or unauthorized...</div>;
   }
 
@@ -166,12 +177,14 @@ export default function AdminDashboardPage() {
               </div>
             </CardContent>
           </Card>
+          {/* Example static card - can be made dynamic later */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-foreground">Revenue This Month</CardTitle>
+              <CardTitle className="text-sm font-medium text-foreground">Placeholder Stat</CardTitle>
+               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">$12,500</div> {/* Static for now */}
+              <div className="text-2xl font-bold text-foreground">N/A</div>
             </CardContent>
           </Card>
         </div>
@@ -319,14 +332,14 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">{labTechPendingProcessingCount}</div>
-              <p className="text-xs text-muted-foreground">Lab tests awaiting processing.</p>
+              <p className="text-xs text-muted-foreground">Lab tests awaiting your processing.</p>
             </CardContent>
           </Card>
         </div>
          <div className="space-y-4">
             <h2 className="text-xl font-semibold text-foreground">Quick Links</h2>
             <Button variant="outline" asChild className="justify-start text-left h-auto py-3 w-full sm:max-w-xs">
-                <Link href="/admin/lab-requests">
+                <Link href="/admin/lab-requests?tab=Pending"> {/* Direct link to pending tab */}
                     <FlaskConical className="mr-3 h-5 w-5" />
                     <div>
                         <p className="font-medium text-foreground">Manage Lab Requests</p>
@@ -339,7 +352,6 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // Fallback for any other roles or if currentUser.role is somehow not covered
   return (
      <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8 space-y-6">
         <div className="flex flex-wrap justify-between items-center gap-3">
@@ -348,8 +360,9 @@ export default function AdminDashboardPage() {
             <p className="text-muted-foreground text-sm">{welcomeMessage}</p>
           </div>
         </div>
-        <p className="text-muted-foreground">Dashboard view for your role is under construction.</p>
+        <p className="text-muted-foreground">Dashboard view for your role is under construction or role not recognized.</p>
      </div>
   );
 }
 
+    

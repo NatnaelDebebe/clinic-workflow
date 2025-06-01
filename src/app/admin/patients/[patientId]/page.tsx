@@ -1,8 +1,8 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,14 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { getManagedPatients, saveManagedPatients, type Patient, type MedicalHistoryEntry, type Prescription, type PatientLabRequest } from '@/lib/data/patients';
+import { getManagedPatients, saveManagedPatients, type Patient, type MedicalHistoryEntry, type Prescription, type PatientLabRequest, PATIENTS_UPDATED_EVENT } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
+import { userRoles as validUserRoles } from '@/lib/data/users';
 import { useForm, type SubmitHandler, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Edit, PlusCircle, Trash2, Eye } from 'lucide-react';
 import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest } from '@/lib/data/labTests';
-import { ScrollArea } from '@/components/ui/scroll-area'; // For potentially long results
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const MedicalHistorySchema = z.object({
   id: z.string().optional(),
@@ -44,16 +45,15 @@ const LabRequestSchema = z.object({
 });
 type LabRequestFormData = z.infer<typeof LabRequestSchema>;
 
-
 export default function PatientDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const searchParams = useSearchParams(); // To read query parameters
+  const searchParams = useSearchParams();
   const patientId = params.patientId as string;
   const { toast } = useToast();
 
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; id?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id: string; } | null>(null);
   
   const [isHistoryFormOpen, setIsHistoryFormOpen] = useState(false);
   const [editingHistoryEntry, setEditingHistoryEntry] = useState<MedicalHistoryEntry | null>(null);
@@ -69,7 +69,6 @@ export default function PatientDetailPage() {
   
   const [activeTab, setActiveTab] = useState("history");
 
-
   const { register: registerHistory, handleSubmit: handleSubmitHistory, reset: resetHistory, setValue: setValueHistory, formState: { errors: errorsHistory } } = useForm<MedicalHistoryFormData>({
     resolver: zodResolver(MedicalHistorySchema),
     defaultValues: { date: new Date().toISOString().split('T')[0], notes: '' },
@@ -83,30 +82,7 @@ export default function PatientDetailPage() {
     resolver: zodResolver(LabRequestSchema),
   });
 
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('loggedInUser');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-           if (!userData.id || !userData.role) {
-            toast({ variant: "destructive", title: "Authentication Error", description: "User ID or role missing. Please log in again." });
-            localStorage.removeItem('loggedInUser');
-            router.push('/');
-            return;
-          }
-          setCurrentUser(userData);
-        } catch (e) { 
-            console.error("Error parsing current user", e); 
-            localStorage.removeItem('loggedInUser');
-            router.push('/'); 
-        }
-      } else {
-        router.push('/'); 
-      }
-    }
-
+  const loadPatientData = useCallback(() => {
     if (patientId) {
       const patients = getManagedPatients();
       const foundPatient = patients.find(p => p.id === patientId);
@@ -117,15 +93,55 @@ export default function PatientDetailPage() {
         router.push('/admin/patients');
       }
     }
+  }, [patientId, router, toast]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('loggedInUser');
+      if (!storedUser) {
+        toast({ variant: "destructive", title: "Authentication Required", description: "Please log in." });
+        router.push('/');
+        return;
+      }
+      try {
+        const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id: string };
+        if (!userData || !userData.id || !validUserRoles.includes(userData.role)) {
+          toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data. Please log in again." });
+          localStorage.removeItem('loggedInUser');
+          router.push('/');
+          return;
+        }
+        setCurrentUser(userData);
+      } catch (e) { 
+        console.error("Error parsing current user", e); 
+        localStorage.removeItem('loggedInUser');
+        router.push('/'); 
+        return;
+      }
+    }
+
+    loadPatientData();
     
     const tabFromQuery = searchParams.get('tab');
     if (tabFromQuery && ['history', 'prescriptions', 'lab_requests'].includes(tabFromQuery)) {
       setActiveTab(tabFromQuery);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId, searchParams]); // loadPatientData is memoized
 
-  }, [patientId, router, toast, searchParams]);
+  // Listener for patient data updates (e.g., lab results entered elsewhere)
+  useEffect(() => {
+    const handlePatientsUpdate = () => {
+      loadPatientData();
+    };
+    window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    return () => {
+      window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+    };
+  }, [loadPatientData]);
 
-  const fetchAvailableLabTests = async () => {
+
+  const fetchAvailableLabTests = useCallback(async () => {
     try {
       const response = await fetch('/api/lab-tests', { cache: 'no-store' });
       if (!response.ok) {
@@ -141,29 +157,26 @@ export default function PatientDetailPage() {
       toast({ variant: "destructive", title: "Error", description: "Could not load available lab tests." });
       setAvailableTests([]);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchAvailableLabTests(); 
-
     const handleLabTestsUpdate = () => {
       fetchAvailableLabTests();
     };
-
     window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
     return () => {
       window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
     };
-  }, []); 
-
+  }, [fetchAvailableLabTests]); 
 
   const updatePatientData = (updatedPatient: Patient) => {
     const allPatients = getManagedPatients();
     const patientIndex = allPatients.findIndex(p => p.id === updatedPatient.id);
     if (patientIndex !== -1) {
       allPatients[patientIndex] = updatedPatient;
-      saveManagedPatients(allPatients);
-      setPatient(updatedPatient); 
+      saveManagedPatients(allPatients); // This will trigger PATIENTS_UPDATED_EVENT
+      // setPatient(updatedPatient); // Let the event listener handle this to avoid stale state issues
     }
   };
 
@@ -291,6 +304,26 @@ export default function PatientDetailPage() {
     setIsLabResultModalOpen(true);
   };
 
+  const getStatusVariant = (status: PatientLabRequest['status']) => {
+    switch (status) {
+      case 'Pending Payment': return 'secondary';
+      case 'Pending': return 'default';
+      case 'Completed': return 'outline';
+      case 'Cancelled': return 'destructive';
+      default: return 'secondary';
+    }
+  };
+  
+  const getStatusClassName = (status: PatientLabRequest['status']) => {
+    switch (status) {
+      case 'Pending Payment': return 'bg-yellow-500/20 text-yellow-700';
+      case 'Pending': return 'bg-blue-500/20 text-blue-700';
+      case 'Completed': return 'bg-green-500/20 text-green-700';
+      case 'Cancelled': return 'bg-red-500/20 text-red-700';
+      default: return '';
+    }
+  };
+
   if (!patient || !currentUser) {
     return <div className="flex flex-1 justify-center items-center p-8">Loading patient data...</div>;
   }
@@ -323,7 +356,10 @@ export default function PatientDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(tab) => {
+          setActiveTab(tab);
+          router.replace(`/admin/patients/${patientId}?tab=${tab}`, { scroll: false });
+      }} className="w-full">
         <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none mb-4">
           <TabsTrigger value="history" className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]">Medical History</TabsTrigger>
           <TabsTrigger value="prescriptions" className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]">Prescriptions</TabsTrigger>
@@ -452,7 +488,7 @@ export default function PatientDetailPage() {
                       <TableHead>Price</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Requested By</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -463,17 +499,8 @@ export default function PatientDetailPage() {
                         <TableCell>${req.priceAtTimeOfRequest?.toFixed(2) || 'N/A'}</TableCell>
                         <TableCell>
                           <Badge 
-                            variant={
-                              req.status === 'Pending Payment' ? 'secondary' :
-                              req.status === 'Pending' ? 'default' : 
-                              req.status === 'Completed' ? 'outline' : 'destructive'
-                            }
-                            className={
-                              req.status === 'Pending Payment' ? 'bg-yellow-500/20 text-yellow-700' :
-                              req.status === 'Pending' ? 'bg-blue-500/20 text-blue-700' : 
-                              req.status === 'Completed' ? 'bg-green-500/20 text-green-700' :
-                              req.status === 'Cancelled' ? 'bg-red-500/20 text-red-700' : ''
-                            }
+                            variant={getStatusVariant(req.status)}
+                            className={getStatusClassName(req.status)}
                           >
                             {req.status}
                           </Badge>
@@ -486,7 +513,7 @@ export default function PatientDetailPage() {
                             </Button>
                           )}
                           {isDoctor && (req.status === 'Pending' || req.status === 'Pending Payment') && (
-                            <Button variant="ghost" size="sm" onClick={() => cancelLabRequest(req.id)} className="text-destructive hover:text-destructive">
+                            <Button variant="destructive" size="sm" onClick={() => cancelLabRequest(req.id)}>
                               Cancel
                             </Button>
                           )}
@@ -503,12 +530,15 @@ export default function PatientDetailPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isHistoryFormOpen} onOpenChange={setIsHistoryFormOpen}>
+      <Dialog open={isHistoryFormOpen} onOpenChange={(isOpen) => {
+        setIsHistoryFormOpen(isOpen);
+        if (!isOpen) { resetHistory({date: new Date().toISOString().split('T')[0], notes: ''}); setEditingHistoryEntry(null); }
+      }}>
         <DialogContent className="sm:max-w-md bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground font-headline">{editingHistoryEntry ? 'Edit' : 'Add'} Medical History Entry</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmitHistory(onHistorySubmit)} className="space-y-4">
+          <form onSubmit={handleSubmitHistory(onHistorySubmit)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="historyDate" className="text-muted-foreground">Date</Label>
               <Input id="historyDate" type="date" {...registerHistory("date")} className="mt-1 bg-background border-input text-foreground" />
@@ -527,12 +557,15 @@ export default function PatientDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isPrescriptionFormOpen} onOpenChange={setIsPrescriptionFormOpen}>
+      <Dialog open={isPrescriptionFormOpen} onOpenChange={(isOpen) => {
+        setIsPrescriptionFormOpen(isOpen);
+        if (!isOpen) { resetPrescription(); setEditingPrescription(null); }
+      }}>
         <DialogContent className="sm:max-w-lg bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground font-headline">{editingPrescription ? 'Edit' : 'Add'} Prescription</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmitPrescription(onPrescriptionSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmitPrescription(onPrescriptionSubmit)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="medicationName" className="text-muted-foreground">Medication Name</Label>
               <Input id="medicationName" {...registerPrescription("medicationName")} className="mt-1 bg-background border-input text-foreground" />
@@ -563,12 +596,15 @@ export default function PatientDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isLabRequestFormOpen} onOpenChange={setIsLabRequestFormOpen}>
+      <Dialog open={isLabRequestFormOpen} onOpenChange={(isOpen) => {
+        setIsLabRequestFormOpen(isOpen);
+        if(!isOpen) { resetLab(); }
+      }}>
         <DialogContent className="sm:max-w-md bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground font-headline">Request Lab Test</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmitLab(onLabRequestSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmitLab(onLabRequestSubmit)} className="space-y-4 py-4">
             <div>
               <Label htmlFor="labTest" className="text-muted-foreground">Select Test</Label>
               <Controller
@@ -582,7 +618,7 @@ export default function PatientDetailPage() {
                     <SelectContent className="bg-popover text-popover-foreground">
                       {availableTests.map(test => (
                         <SelectItem key={test.id} value={test.id} className="hover:bg-accent focus:bg-accent">
-                          {test.name} {/* Show only test name to doctor */}
+                          {test.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -599,7 +635,10 @@ export default function PatientDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isLabResultModalOpen} onOpenChange={setIsLabResultModalOpen}>
+      <Dialog open={isLabResultModalOpen} onOpenChange={(isOpen) => {
+          setIsLabResultModalOpen(isOpen);
+          if (!isOpen) { setSelectedLabResult(null); }
+      }}>
         <DialogContent className="sm:max-w-lg bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground font-headline">Lab Results: {selectedLabResult?.testName}</DialogTitle>
@@ -635,3 +674,5 @@ export default function PatientDetailPage() {
     </div>
   );
 }
+
+    
