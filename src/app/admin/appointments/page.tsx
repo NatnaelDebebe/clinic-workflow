@@ -31,7 +31,7 @@ import { getManagedPatients } from '@/lib/data/patients';
 import type { Appointment } from '@/lib/data/appointments';
 import { getManagedAppointments, saveManagedAppointments, APPOINTMENTS_UPDATED_EVENT } from '@/lib/data/appointments';
 import { useToast } from "@/hooks/use-toast";
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 const AppointmentSchema = z.object({
   patientId: z.string().min(1, "Patient is required"),
@@ -123,7 +123,6 @@ const AppointmentTable = ({ appointments, onActionClick }: { appointments: Appoi
 
 export default function AdminAppointmentsPage() {
   const router = useRouter();
-  // const pathname = usePathname(); // Keep for potential future use if needed, but not for main auth effect
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string; role: UserRole; username: string; } | null>(null);
 
@@ -165,12 +164,14 @@ export default function AdminAppointmentsPage() {
         
         setCurrentUser(userData);
 
-        setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
-        setDoctorsForForm(
-          getManagedUsers()
-            .filter(u => u.role === 'doctor' && u.status === 'Active')
-            .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
-        );
+        if (userData.role === 'receptionist') {
+            setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
+            setDoctorsForForm(
+              getManagedUsers()
+                .filter(u => u.role === 'doctor' && u.status === 'Active')
+                .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
+            );
+        }
 
       } catch (e) {
         console.error("Error parsing current user on /admin/appointments page.", e);
@@ -178,27 +179,25 @@ export default function AdminAppointmentsPage() {
         router.push('/');
       }
     }
-  }, [router, toast]); // Removed pathname from dependencies
+  }, [router, toast]);
 
 
   const fetchAppointments = useCallback(() => {
-    if (!currentUser || !currentUser.id) {
-        setAllAppointments([]);
-        return;
-    }
+    // Now always fetches all appointments for this page, regardless of role.
+    // Filtering for specific doctor views is handled on /admin/my-appointments page.
     let appointments = getManagedAppointments();
-    if (currentUser.role === 'doctor') {
-      appointments = appointments.filter(apt => apt.doctorId === currentUser.id);
-    }
     setAllAppointments(appointments.sort((a,b) => {
         const dateA = parseISO(a.createdAt);
         const dateB = parseISO(b.createdAt);
         if (!isValid(dateA) || !isValid(dateB)) return 0;
         return dateB.getTime() - dateA.getTime();
     }));
-  }, [currentUser]);
+  }, []); // No dependency on currentUser for filtering logic itself
 
   useEffect(() => {
+    // Fetch appointments once current user is confirmed to have access
+    // or if a general fetch is always needed (as is now the case for this page).
+    // currentUser check here ensures we don't fetch before auth is confirmed.
     if (currentUser) {
       fetchAppointments();
     }
