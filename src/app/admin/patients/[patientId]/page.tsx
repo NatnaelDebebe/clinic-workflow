@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,8 +19,9 @@ import type { UserRole } from '@/lib/data/users';
 import { useForm, type SubmitHandler, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Edit, PlusCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit, PlusCircle, Trash2, Eye } from 'lucide-react';
 import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest } from '@/lib/data/labTests';
+import { ScrollArea } from '@/components/ui/scroll-area'; // For potentially long results
 
 const MedicalHistorySchema = z.object({
   id: z.string().optional(),
@@ -47,11 +48,12 @@ type LabRequestFormData = z.infer<typeof LabRequestSchema>;
 export default function PatientDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams(); // To read query parameters
   const patientId = params.patientId as string;
   const { toast } = useToast();
 
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; id?: string } | null>(null);
   
   const [isHistoryFormOpen, setIsHistoryFormOpen] = useState(false);
   const [editingHistoryEntry, setEditingHistoryEntry] = useState<MedicalHistoryEntry | null>(null);
@@ -61,6 +63,11 @@ export default function PatientDetailPage() {
 
   const [isLabRequestFormOpen, setIsLabRequestFormOpen] = useState(false);
   const [availableTests, setAvailableTests] = useState<AdminLabTest[]>([]);
+
+  const [isLabResultModalOpen, setIsLabResultModalOpen] = useState(false);
+  const [selectedLabResult, setSelectedLabResult] = useState<PatientLabRequest | null>(null);
+  
+  const [activeTab, setActiveTab] = useState("history");
 
 
   const { register: registerHistory, handleSubmit: handleSubmitHistory, reset: resetHistory, setValue: setValueHistory, formState: { errors: errorsHistory } } = useForm<MedicalHistoryFormData>({
@@ -82,8 +89,19 @@ export default function PatientDetailPage() {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
-          setCurrentUser(JSON.parse(storedUser));
-        } catch (e) { console.error("Error parsing current user", e); router.push('/admin/patients'); }
+          const userData = JSON.parse(storedUser);
+           if (!userData.id || !userData.role) {
+            toast({ variant: "destructive", title: "Authentication Error", description: "User ID or role missing. Please log in again." });
+            localStorage.removeItem('loggedInUser');
+            router.push('/');
+            return;
+          }
+          setCurrentUser(userData);
+        } catch (e) { 
+            console.error("Error parsing current user", e); 
+            localStorage.removeItem('loggedInUser');
+            router.push('/'); 
+        }
       } else {
         router.push('/'); 
       }
@@ -99,7 +117,13 @@ export default function PatientDetailPage() {
         router.push('/admin/patients');
       }
     }
-  }, [patientId, router, toast]);
+    
+    const tabFromQuery = searchParams.get('tab');
+    if (tabFromQuery && ['history', 'prescriptions', 'lab_requests'].includes(tabFromQuery)) {
+      setActiveTab(tabFromQuery);
+    }
+
+  }, [patientId, router, toast, searchParams]);
 
   const fetchAvailableLabTests = async () => {
     try {
@@ -120,7 +144,7 @@ export default function PatientDetailPage() {
   };
 
   useEffect(() => {
-    fetchAvailableLabTests(); // Initial fetch
+    fetchAvailableLabTests(); 
 
     const handleLabTestsUpdate = () => {
       fetchAvailableLabTests();
@@ -130,7 +154,7 @@ export default function PatientDetailPage() {
     return () => {
       window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
     };
-  }, []); // Empty dependency array to run once on mount and set up listener
+  }, []); 
 
 
   const updatePatientData = (updatedPatient: Patient) => {
@@ -262,12 +286,17 @@ export default function PatientDetailPage() {
     toast({ title: "Lab Request Cancelled" });
   };
 
+  const openLabResultModal = (request: PatientLabRequest) => {
+    setSelectedLabResult(request);
+    setIsLabResultModalOpen(true);
+  };
 
   if (!patient || !currentUser) {
     return <div className="flex flex-1 justify-center items-center p-8">Loading patient data...</div>;
   }
 
   const isDoctor = currentUser.role === 'doctor';
+  const canManagePatientData = currentUser.role === 'doctor' || currentUser.role === 'admin';
 
   return (
     <div className="flex flex-col flex-1 p-4 md:p-6 lg:p-8 space-y-6">
@@ -294,7 +323,7 @@ export default function PatientDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="history" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none mb-4">
           <TabsTrigger value="history" className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]">Medical History</TabsTrigger>
           <TabsTrigger value="prescriptions" className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]">Prescriptions</TabsTrigger>
@@ -305,7 +334,7 @@ export default function PatientDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Medical History</CardTitle>
-              {isDoctor && (
+              {canManagePatientData && (
                 <Button onClick={() => openHistoryForm()} variant="outline">
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Entry
                 </Button>
@@ -319,7 +348,7 @@ export default function PatientDetailPage() {
                       <TableHead>Date</TableHead>
                       <TableHead>Notes</TableHead>
                       <TableHead>Entered By</TableHead>
-                      {isDoctor && <TableHead className="text-right">Actions</TableHead>}
+                      {canManagePatientData && <TableHead className="text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -328,7 +357,7 @@ export default function PatientDetailPage() {
                         <TableCell>{entry.date}</TableCell>
                         <TableCell className="whitespace-pre-wrap">{entry.notes}</TableCell>
                         <TableCell>{entry.enteredBy || 'N/A'}</TableCell>
-                        {isDoctor && (
+                        {canManagePatientData && (
                           <TableCell className="text-right">
                             <Button variant="ghost" size="icon" onClick={() => openHistoryForm(entry)} className="mr-2">
                               <Edit className="h-4 w-4" />
@@ -353,7 +382,7 @@ export default function PatientDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Prescriptions</CardTitle>
-              {isDoctor && (
+              {canManagePatientData && (
                 <Button onClick={() => openPrescriptionForm()} variant="outline">
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Prescription
                 </Button>
@@ -370,7 +399,7 @@ export default function PatientDetailPage() {
                       <TableHead>Frequency</TableHead>
                       <TableHead>Duration</TableHead>
                       <TableHead>Prescribed By</TableHead>
-                      {isDoctor && <TableHead className="text-right">Actions</TableHead>}
+                      {canManagePatientData && <TableHead className="text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -382,7 +411,7 @@ export default function PatientDetailPage() {
                         <TableCell>{rx.frequency}</TableCell>
                         <TableCell>{rx.duration}</TableCell>
                         <TableCell>{rx.prescribedBy || 'N/A'}</TableCell>
-                        {isDoctor && (
+                        {canManagePatientData && (
                            <TableCell className="text-right">
                             <Button variant="ghost" size="icon" onClick={() => openPrescriptionForm(rx)} className="mr-2">
                               <Edit className="h-4 w-4" />
@@ -423,12 +452,12 @@ export default function PatientDetailPage() {
                       <TableHead>Price</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Requested By</TableHead>
-                      {isDoctor && <TableHead className="text-right">Actions</TableHead>}
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {patient.labRequests.slice().sort((a,b) => new Date(b.requestedDate).getTime() - new Date(a.requestedDate).getTime()).map(req => (
-                      <TableRow key={req.id}>
+                      <TableRow key={req.id} className={searchParams.get('requestId') === req.id ? 'bg-accent/50' : ''}>
                         <TableCell>{req.requestedDate}</TableCell>
                         <TableCell>{req.testName}</TableCell>
                         <TableCell>${req.priceAtTimeOfRequest?.toFixed(2) || 'N/A'}</TableCell>
@@ -450,13 +479,18 @@ export default function PatientDetailPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{req.requestedBy || 'N/A'}</TableCell>
-                        {isDoctor && (req.status === 'Pending' || req.status === 'Pending Payment') && (
-                           <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
+                          {req.status === 'Completed' && req.resultsSummary && (
+                            <Button variant="outline" size="sm" onClick={() => openLabResultModal(req)}>
+                                <Eye className="mr-1 h-4 w-4" /> View Results
+                            </Button>
+                          )}
+                          {isDoctor && (req.status === 'Pending' || req.status === 'Pending Payment') && (
                             <Button variant="ghost" size="sm" onClick={() => cancelLabRequest(req.id)} className="text-destructive hover:text-destructive">
                               Cancel
                             </Button>
-                          </TableCell>
-                        )}
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -562,6 +596,40 @@ export default function PatientDetailPage() {
               <Button type="submit">Request Test</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isLabResultModalOpen} onOpenChange={setIsLabResultModalOpen}>
+        <DialogContent className="sm:max-w-lg bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-foreground font-headline">Lab Results: {selectedLabResult?.testName}</DialogTitle>
+            <CardDescription>For patient: {patient?.name}</CardDescription>
+          </DialogHeader>
+          {selectedLabResult ? (
+            <div className="space-y-3 py-4">
+              <div>
+                <Label className="text-muted-foreground">Date Entered:</Label>
+                <p className="text-sm text-foreground">{selectedLabResult.resultDate || 'N/A'}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Entered By:</Label>
+                <p className="text-sm text-foreground">{selectedLabResult.resultEnteredBy || 'N/A'}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Results Summary:</Label>
+                <ScrollArea className="h-40 w-full rounded-md border p-3 bg-background">
+                  <pre className="text-sm text-foreground whitespace-pre-wrap">{selectedLabResult.resultsSummary || 'No summary available.'}</pre>
+                </ScrollArea>
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">No result details to display.</p>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Close</Button>
+            </DialogClose>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -7,23 +7,34 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Search, CheckCircle } from 'lucide-react';
+import { Eye, Search, FileTextIcon } from 'lucide-react'; // Replaced CheckCircle with FileTextIcon
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { getManagedPatients, saveManagedPatients, type PatientLabRequest } from '@/lib/data/patients';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { getManagedPatients, saveManagedPatients, type PatientLabRequest, type Patient } from '@/lib/data/patients';
 import type { UserRole } from '@/lib/data/users';
 import { userRoles as validUserRoles } from '@/lib/data/users'; 
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
+import { useForm, type SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 interface LabRequestWithPatientInfo extends PatientLabRequest {
   patientId: string;
   patientName: string;
 }
 
+const LabResultSchema = z.object({
+  resultsSummary: z.string().min(1, "Results summary cannot be empty."),
+});
+type LabResultFormData = z.infer<typeof LabResultSchema>;
+
 const TABS_CONFIG: Array<{value: PatientLabRequest['status'] | 'all', label: string, roles: UserRole[]}> = [
-  { value: 'all', label: 'All', roles: ['admin', 'doctor', 'receptionist'] },
+  { value: 'all', label: 'All', roles: ['admin', 'doctor', 'receptionist', 'lab_tech'] }, // Added lab_tech to all
   { value: 'Pending Payment', label: 'Pending Payment', roles: ['admin', 'receptionist', 'doctor'] },
   { value: 'Pending', label: 'Pending Processing', roles: ['admin', 'lab_tech', 'doctor'] },
   { value: 'Completed', label: 'Completed', roles: ['admin', 'lab_tech', 'doctor', 'receptionist'] },
@@ -60,16 +71,15 @@ const getStatusClassName = (status: string) => {
     }
 };
 
-
 const LabRequestTable = ({ 
   requests, 
   currentUserRole,
-  onMarkCompleted,
+  onEnterResults,
   onViewDetails,
 }: { 
   requests: LabRequestWithPatientInfo[], 
   currentUserRole: UserRole | null,
-  onMarkCompleted: (patientId: string, requestId: string) => void,
+  onEnterResults: (request: LabRequestWithPatientInfo) => void,
   onViewDetails: (patientId: string, requestId: string) => void,
 }) => (
   <Card className="overflow-hidden">
@@ -101,9 +111,9 @@ const LabRequestTable = ({
             </TableCell>
             <TableCell className="text-right space-x-1">
               {currentUserRole === 'lab_tech' && request.status === 'Pending' && (
-                <Button variant="outline" size="sm" onClick={() => onMarkCompleted(request.patientId, request.id)}>
-                  <CheckCircle className="mr-1 h-4 w-4" />
-                  Mark Completed
+                <Button variant="outline" size="sm" onClick={() => onEnterResults(request)}>
+                  <FileTextIcon className="mr-1 h-4 w-4" />
+                  Enter Results
                 </Button>
               )}
               <Button variant="ghost" size="icon" onClick={() => onViewDetails(request.patientId, request.id)} asChild>
@@ -125,25 +135,32 @@ const LabRequestTable = ({
   </Card>
 );
 
-
 export default function AdminLabRequestsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string; role: UserRole; username: string; id?: string; } | null>(null);
   
   const [activeTab, setActiveTab] = useState<PatientLabRequest['status'] | 'all'>("all");
   const [searchTerm, setSearchTerm] = useState('');
   const [allLabRequests, setAllLabRequests] = useState<LabRequestWithPatientInfo[]>([]);
+
+  const [isResultsModalOpen, setIsResultsModalOpen] = useState(false);
+  const [currentRequestForResults, setCurrentRequestForResults] = useState<LabRequestWithPatientInfo | null>(null);
+
+  const { register: registerResult, handleSubmit: handleSubmitResult, reset: resetResult, formState: { errors: errorsResult } } = useForm<LabResultFormData>({
+    resolver: zodResolver(LabResultSchema),
+  });
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string };
+          const userData = JSON.parse(storedUser) as { fullName: string; role: UserRole; username: string; id?:string };
           
-          if (!userData || !userData.role || !validUserRoles.includes(userData.role)) {
-            toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data." });
+          if (!userData || !userData.role || !validUserRoles.includes(userData.role) || !userData.id) {
+            toast({ variant: "destructive", title: "Authentication Error", description: "Invalid user data. Please log in again." });
+            localStorage.removeItem('loggedInUser');
             router.push('/');
             return;
           }
@@ -155,25 +172,18 @@ export default function AdminLabRequestsPage() {
              return;
            }
           
+          // Set initial active tab based on role
           if (userData.role === 'lab_tech') {
             setActiveTab('Pending');
           } else if (userData.role === 'receptionist') {
-            const receptionistTabs = TABS_CONFIG.filter(tab => tab.roles.includes('receptionist'));
-             if (receptionistTabs.find(t => t.value === 'Pending Payment')) {
-                  setActiveTab('Pending Payment');
-             } else if (receptionistTabs.find(t => t.value === 'all')) {
-                  setActiveTab('all');
-             } else if (receptionistTabs.length > 0) {
-                 setActiveTab(receptionistTabs[0].value);
-             } else {
-                setActiveTab('all'); // Fallback
-             }
+            setActiveTab('Pending Payment');
           } else {
             setActiveTab('all'); // Default for admin/doctor
           }
 
         } catch (e) { 
-            console.error("Error parsing current user from localStorage on /admin/lab-requests", e); 
+            console.error("Error parsing current user from localStorage on /admin/lab-requests", e);
+            localStorage.removeItem('loggedInUser');
             router.push('/'); 
             return;
         }
@@ -198,8 +208,11 @@ export default function AdminLabRequestsPage() {
     const requests: LabRequestWithPatientInfo[] = [];
     patients.forEach(patient => {
       patient.labRequests.forEach(req => {
+        // Lab techs see 'Pending' and 'Completed' by default, others see all related to their role/filters
         if (currentUser.role === 'lab_tech' && !(req.status === 'Pending' || req.status === 'Completed')) {
-          return; 
+          // This specific filter might be too restrictive if they want to see 'all' their relevant ones.
+          // The tabs will handle filtering, so let's include all for lab_tech here and let tabs filter.
+           // return; 
         }
         requests.push({
           ...req,
@@ -218,7 +231,10 @@ export default function AdminLabRequestsPage() {
   const getFilteredRequestsForTab = (tabKey: PatientLabRequest['status'] | 'all') => {
     let baseRequests = allLabRequests; 
     
-    if (tabKey !== 'all') {
+    // Filter by currentUser role if lab_tech to only show relevant items in "All"
+    if (currentUser?.role === 'lab_tech' && tabKey === 'all') {
+      baseRequests = allLabRequests.filter(req => req.status === 'Pending' || req.status === 'Completed');
+    } else if (tabKey !== 'all') {
       baseRequests = allLabRequests.filter(req => req.status === tabKey);
     }
     
@@ -229,28 +245,41 @@ export default function AdminLabRequestsPage() {
     );
   };
   
-  const handleMarkCompleted = (patientId: string, requestId: string) => {
+  const openResultsModal = (request: LabRequestWithPatientInfo) => {
     if (currentUser?.role !== 'lab_tech') return;
+    setCurrentRequestForResults(request);
+    resetResult({ resultsSummary: '' }); // Reset form
+    setIsResultsModalOpen(true);
+  };
+
+  const onResultsSubmit: SubmitHandler<LabResultFormData> = (data) => {
+    if (!currentRequestForResults || !currentUser || currentUser.role !== 'lab_tech') return;
 
     const patients = getManagedPatients();
-    const patientIndex = patients.findIndex(p => p.id === patientId);
+    const patientIndex = patients.findIndex(p => p.id === currentRequestForResults.patientId);
     if (patientIndex === -1) {
         toast({ variant: "destructive", title: "Error", description: "Patient not found." });
         return;
     }
 
     const patient = patients[patientIndex];
-    const requestIndex = patient.labRequests.findIndex(req => req.id === requestId);
+    const requestIndex = patient.labRequests.findIndex(req => req.id === currentRequestForResults.id);
     if (requestIndex === -1) {
         toast({ variant: "destructive", title: "Error", description: "Lab request not found." });
         return;
     }
     
     patient.labRequests[requestIndex].status = 'Completed';
+    patient.labRequests[requestIndex].resultsSummary = data.resultsSummary;
+    patient.labRequests[requestIndex].resultEnteredBy = currentUser.fullName;
+    patient.labRequests[requestIndex].resultDate = new Date().toISOString().split('T')[0];
+    
     patients[patientIndex] = patient;
     saveManagedPatients(patients);
-    toast({ title: "Lab Test Completed", description: `${patient.labRequests[requestIndex].testName} marked as completed.` });
+    toast({ title: "Lab Results Submitted", description: `Results for ${patient.labRequests[requestIndex].testName} have been submitted.` });
     loadLabRequests(); 
+    setIsResultsModalOpen(false);
+    setCurrentRequestForResults(null);
   };
 
   const handleViewDetails = (patientId: string, requestId: string) => {
@@ -304,13 +333,46 @@ export default function AdminLabRequestsPage() {
                 <LabRequestTable 
                   requests={getFilteredRequestsForTab(tab.value)} 
                   currentUserRole={currentUser.role}
-                  onMarkCompleted={handleMarkCompleted}
+                  onEnterResults={openResultsModal}
                   onViewDetails={handleViewDetails}
                 />
               </TabsContent>
             ))}
           </Tabs>
         </div>
+
+      <Dialog open={isResultsModalOpen} onOpenChange={(isOpen) => {
+        setIsResultsModalOpen(isOpen);
+        if (!isOpen) {
+          setCurrentRequestForResults(null);
+          resetResult(); 
+        }
+      }}>
+        <DialogContent className="sm:max-w-lg bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-foreground font-headline">
+              Enter Lab Results for {currentRequestForResults?.testName}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitResult(onResultsSubmit)} className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="resultsSummary" className="text-muted-foreground">Results Summary</Label>
+              <Textarea 
+                id="resultsSummary" 
+                {...registerResult("resultsSummary")} 
+                rows={8} 
+                className="mt-1 bg-background border-input text-foreground placeholder:text-muted-foreground" 
+                placeholder="Enter the lab test results summary here..."
+              />
+              {errorsResult.resultsSummary && <p className="text-sm text-destructive mt-1">{errorsResult.resultsSummary.message}</p>}
+            </div>
+            <DialogFooter>
+              <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="submit">Submit Results & Mark Completed</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -26,7 +26,9 @@ export interface PatientLabRequest {
   testName: string;
   requestedDate: string;
   status: 'Pending Payment' | 'Pending' | 'Completed' | 'Cancelled'; // Added 'Pending Payment'
-  results?: string; // Optional field for results
+  resultsSummary?: string; // Textual summary of the lab results
+  resultEnteredBy?: string; // Name of the lab tech who entered the results
+  resultDate?: string; // Date when results were entered
   requestedBy?: string; // Doctor's name or ID
   priceAtTimeOfRequest?: number; // Price at the time of request
   patientName?: string; // Added for easier display in billing/lab request views
@@ -67,12 +69,17 @@ export function getManagedPatients(): Patient[] {
     if (storedPatients) {
       try {
         const parsedPatients = JSON.parse(storedPatients) as Patient[];
-        // Ensure new fields have default empty arrays if missing from older localStorage data
+        // Ensure new fields have default empty arrays or undefined if missing from older localStorage data
         return parsedPatients.map(p => ({
           ...p,
           medicalHistory: p.medicalHistory || [],
           prescriptions: p.prescriptions || [],
-          labRequests: p.labRequests || [],
+          labRequests: (p.labRequests || []).map(req => ({
+            ...req,
+            resultsSummary: req.resultsSummary || undefined,
+            resultEnteredBy: req.resultEnteredBy || undefined,
+            resultDate: req.resultDate || undefined,
+          })),
         }));
       } catch (e) {
         console.error("Error parsing managed patients from localStorage", e);
@@ -81,7 +88,7 @@ export function getManagedPatients(): Patient[] {
           ...p,
           medicalHistory: [],
           prescriptions: [],
-          labRequests: [],
+          labRequests: [], // New requests will get the new fields by default when created
         }));
         localStorage.setItem(MANAGED_PATIENTS_STORAGE_KEY, JSON.stringify(initializedPatients));
         return initializedPatients;
@@ -102,7 +109,12 @@ export function getManagedPatients(): Patient[] {
     ...p,
     medicalHistory: p.medicalHistory || [],
     prescriptions: p.prescriptions || [],
-    labRequests: p.labRequests || [],
+    labRequests: (p.labRequests || []).map(req => ({
+        ...req,
+        resultsSummary: req.resultsSummary || undefined,
+        resultEnteredBy: req.resultEnteredBy || undefined,
+        resultDate: req.resultDate || undefined,
+    })),
   }));
 }
 
