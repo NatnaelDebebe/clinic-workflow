@@ -12,10 +12,12 @@ import type { UserRole } from '@/lib/data/users';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { LAB_TESTS_UPDATED_EVENT, type AdminLabTest, getManagedLabTests } from '@/lib/data/labTests';
-import { PATIENTS_UPDATED_EVENT, getManagedPatients } from '@/lib/data/patients'; // Import patient data functions
+import { PATIENTS_UPDATED_EVENT, getManagedPatients } from '@/lib/data/patients';
+import { APPOINTMENTS_UPDATED_EVENT, getManagedAppointments, type Appointment } from '@/lib/data/appointments';
+import { isToday, parseISO, isValid } from 'date-fns';
 
-// Sample data for upcoming appointments (can be made dynamic later)
-const upcomingAppointments = [
+// Sample data for upcoming appointments table (remains static as per current scope)
+const upcomingAppointmentsTableData = [
   { id: '1', patientName: 'Ethan Carter', date: '2024-07-20', time: '10:00 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
   { id: '2', patientName: 'Olivia Bennett', date: '2024-07-20', time: '11:30 AM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
   { id: '3', patientName: 'Noah Thompson', date: '2024-07-20', time: '02:00 PM', doctor: 'Dr. Amelia Harper', status: 'Scheduled' },
@@ -32,6 +34,7 @@ export default function AdminDashboardPage() {
   const [labTestSearchTerm, setLabTestSearchTerm] = useState('');
   
   const [totalPatientsCount, setTotalPatientsCount] = useState<number | null>(null);
+  const [todaysAppointmentsCount, setTodaysAppointmentsCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -61,18 +64,27 @@ export default function AdminDashboardPage() {
     setTotalPatientsCount(patients.length);
   }, []);
 
+  const refreshTodaysAppointmentsCount = useCallback(() => {
+    const allAppointments = getManagedAppointments();
+    const today = new Date();
+    const count = allAppointments.filter(apt => {
+      const aptDate = parseISO(apt.appointmentDate);
+      return isValid(aptDate) && isToday(aptDate);
+    }).length;
+    setTodaysAppointmentsCount(count);
+  }, []);
+
+
   useEffect(() => {
     if (currentUser) {
-      // Initial load for patient stats
       refreshPatientStats();
+      refreshTodaysAppointmentsCount();
 
-      // Initial load for lab tests if user is admin or receptionist
       if (currentUser.role === 'admin' || currentUser.role === 'receptionist') {
         refreshLabTestsView();
       }
     }
 
-    // Listen for lab tests updates
     const handleLabTestsUpdate = () => {
       if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'receptionist')) {
         refreshLabTestsView();
@@ -80,17 +92,22 @@ export default function AdminDashboardPage() {
     };
     window.addEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
 
-    // Listen for patient updates
     const handlePatientsUpdate = () => {
       refreshPatientStats();
     };
     window.addEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+
+    const handleAppointmentsUpdate = () => {
+      refreshTodaysAppointmentsCount();
+    };
+    window.addEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
     
     return () => {
       window.removeEventListener(LAB_TESTS_UPDATED_EVENT, handleLabTestsUpdate);
       window.removeEventListener(PATIENTS_UPDATED_EVENT, handlePatientsUpdate);
+      window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, handleAppointmentsUpdate);
     };
-  }, [currentUser, refreshLabTestsView, refreshPatientStats]);
+  }, [currentUser, refreshLabTestsView, refreshPatientStats, refreshTodaysAppointmentsCount]);
 
   const handleLabTestSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setLabTestSearchTerm(event.target.value.toLowerCase());
@@ -132,7 +149,9 @@ export default function AdminDashboardPage() {
             <CardTitle className="text-sm font-medium text-foreground">Appointments Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">15</div> {/* Static for now */}
+            <div className="text-2xl font-bold text-foreground">
+              {todaysAppointmentsCount !== null ? todaysAppointmentsCount : 'Loading...'}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -162,7 +181,7 @@ export default function AdminDashboardPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {upcomingAppointments.map((appointment) => (
+                    {upcomingAppointmentsTableData.map((appointment) => (
                     <TableRow key={appointment.id}>
                         <TableCell className="font-medium text-foreground">{appointment.patientName}</TableCell>
                         <TableCell className="text-muted-foreground">{appointment.date}</TableCell>
@@ -175,7 +194,7 @@ export default function AdminDashboardPage() {
                     ))}
                 </TableBody>
                 </Table>
-                {upcomingAppointments.length === 0 && (
+                {upcomingAppointmentsTableData.length === 0 && (
                     <div className="text-center py-10 text-muted-foreground">
                         No upcoming appointments.
                     </div>
@@ -237,3 +256,5 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+    
