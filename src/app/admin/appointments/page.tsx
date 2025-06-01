@@ -133,25 +133,28 @@ export default function AdminAppointmentsPage() {
   const [patientsForForm, setPatientsForForm] = useState<Patient[]>([]);
   const [doctorsForForm, setDoctorsForForm] = useState<DoctorForForm[]>([]);
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<AppointmentFormData>({
+  const { register, handleSubmit: handleFormSubmit, reset, control, formState: { errors } } = useForm<AppointmentFormData>({
     resolver: zodResolver(AppointmentSchema),
   });
 
   const fetchAppointments = useCallback(() => {
+    if (!currentUser) return; // Ensure currentUser is available
     let appointments = getManagedAppointments();
-    if (currentUser && currentUser.role === 'doctor') {
+    if (currentUser.role === 'doctor') {
       appointments = appointments.filter(apt => apt.doctorId === currentUser.id);
     }
+    // Sort by creation date descending for initial load, tab filtering will re-sort
     setAllAppointments(appointments.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
   }, [currentUser]);
 
+  // Effect for setting up current user and initial form data (patients & doctors)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUser = localStorage.getItem('loggedInUser');
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
-          setCurrentUser(userData);
+          setCurrentUser(userData); // Set current user
            if (!['admin', 'receptionist', 'doctor'].includes(userData.role)) {
              toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
              router.push('/admin');
@@ -170,18 +173,26 @@ export default function AdminAppointmentsPage() {
         .filter(u => u.role === 'doctor' && u.status === 'Active')
         .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
     );
+  }, [router, toast]); // Runs once on mount or if router/toast references change (they generally don't)
 
-    window.addEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
-    return () => {
-      window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
-    };
-  }, [router, toast, fetchAppointments]);
-
+  // Effect for fetching appointments when currentUser changes or fetchAppointments callback is redefined
   useEffect(() => {
     if (currentUser) {
       fetchAppointments();
     }
   }, [currentUser, fetchAppointments]);
+
+  // Effect for managing the APPOINTMENTS_UPDATED_EVENT listener
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // The fetchAppointments callback already depends on currentUser,
+      // so it will be the correct version when this effect re-runs.
+      window.addEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
+      return () => {
+        window.removeEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
+      };
+    }
+  }, [fetchAppointments]); // Re-binds if fetchAppointments changes
 
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -329,7 +340,7 @@ export default function AdminAppointmentsPage() {
           <DialogHeader>
             <DialogTitle className="text-foreground font-headline">New Appointment</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onAppointmentSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-2">
+          <form onSubmit={handleFormSubmit(onAppointmentSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-2">
             <div>
               <Label htmlFor="patientId" className="text-muted-foreground">Patient</Label>
               <Controller
