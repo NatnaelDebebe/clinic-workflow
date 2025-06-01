@@ -42,6 +42,12 @@ const AppointmentSchema = z.object({
 
 type AppointmentFormData = z.infer<typeof AppointmentSchema>;
 
+interface DoctorForForm {
+  id: string;
+  fullName: string;
+  specialization?: string;
+}
+
 const getStatusVariant = (status: string) => {
   switch (status.toLowerCase()) {
     case 'scheduled': return 'secondary';
@@ -125,7 +131,7 @@ export default function AdminAppointmentsPage() {
   
   const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
   const [patientsForForm, setPatientsForForm] = useState<Patient[]>([]);
-  const [doctorsForForm, setDoctorsForForm] = useState<User[]>([]);
+  const [doctorsForForm, setDoctorsForForm] = useState<DoctorForForm[]>([]);
 
   const { register, handleSubmit, reset, control, formState: { errors } } = useForm<AppointmentFormData>({
     resolver: zodResolver(AppointmentSchema),
@@ -156,7 +162,11 @@ export default function AdminAppointmentsPage() {
     
     fetchAppointments();
     setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
-    setDoctorsForForm(getManagedUsers().filter(u => u.role === 'doctor' && u.status === 'Active'));
+    setDoctorsForForm(
+      getManagedUsers()
+        .filter(u => u.role === 'doctor' && u.status === 'Active')
+        .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
+    );
 
     window.addEventListener(APPOINTMENTS_UPDATED_EVENT, fetchAppointments);
     return () => {
@@ -177,7 +187,7 @@ export default function AdminAppointmentsPage() {
     );
 
     const today = new Date();
-    today.setHours(0,0,0,0); // Normalize today to the start of the day for comparisons
+    today.setHours(0,0,0,0); 
 
     const upcoming = filtered.filter(apt => {
         const aptDate = parseISO(apt.appointmentDate);
@@ -205,7 +215,6 @@ export default function AdminAppointmentsPage() {
 
   const handleViewAppointment = (appointmentId: string) => {
     console.log("View appointment:", appointmentId);
-    // Navigation to detail page will be handled by Link component
   };
 
   const openNewAppointmentForm = () => {
@@ -228,7 +237,7 @@ export default function AdminAppointmentsPage() {
       patientName: selectedPatient.name,
       doctorId: selectedDoctor.id,
       doctorName: selectedDoctor.fullName,
-      appointmentDate: format(data.appointmentDate, 'yyyy-MM-dd'), // Store as ISO string part
+      appointmentDate: format(data.appointmentDate, 'yyyy-MM-dd'),
       appointmentTime: data.appointmentTime,
       status: 'Scheduled',
       notes: data.notes,
@@ -348,7 +357,7 @@ export default function AdminAppointmentsPage() {
                     <SelectContent className="bg-popover text-popover-foreground">
                       {doctorsForForm.map(d => (
                         <SelectItem key={d.id} value={d.id} className="hover:bg-accent focus:bg-accent">
-                          {d.fullName}
+                          {d.fullName} {d.specialization ? `(${d.specialization})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -383,7 +392,7 @@ export default function AdminAppointmentsPage() {
                                 mode="single"
                                 selected={field.value}
                                 onSelect={field.onChange}
-                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) } // Disable past dates
+                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) } 
                                 initialFocus
                             />
                             </PopoverContent>

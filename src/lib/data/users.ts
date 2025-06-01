@@ -11,17 +11,18 @@ export interface User {
   username: string; // This will be used as email for login
   password?: string; // Password will be checked directly for this demo
   role: UserRole;
+  specialization?: string; // Added field for doctor's specialization
   status: 'Active' | 'Inactive';
 }
 
 // Sample user data, including a default admin with a known password
 export const initialUsers: User[] = [
   { id: 'admin001', fullName: 'Admin User', username: 'admin@clinic.com', password: 'adminpassword', role: 'admin', status: 'Active' },
-  { id: 'doc001', fullName: 'Dr. Amelia Harper', username: 'amelia.harper@clinic.com', password: 'doctorpassword', role: 'doctor', status: 'Active' },
+  { id: 'doc001', fullName: 'Dr. Amelia Harper', username: 'amelia.harper@clinic.com', password: 'doctorpassword', role: 'doctor', specialization: 'General Physician', status: 'Active' },
   { id: 'lab001', fullName: 'Mark Johnson', username: 'mark.johnson@clinic.com', password: 'labpassword', role: 'lab_tech', status: 'Active' },
   { id: 'rec001', fullName: 'Sarah Miller', username: 'sarah.miller@clinic.com', password: 'receptionistpassword', role: 'receptionist', status: 'Active' },
   { id: 'pat001', fullName: 'John Doe', username: 'john.patient@example.com', password: 'patientpassword', role: 'patient', status: 'Active' },
-  { id: 'doc002', fullName: 'Dr. Robert Harris', username: 'robert.harris@clinic.com', password: 'doctorpassword2', role: 'doctor', status: 'Inactive'},
+  { id: 'doc002', fullName: 'Dr. Robert Harris', username: 'robert.harris@clinic.com', password: 'doctorpassword2', role: 'doctor', specialization: 'Cardiologist', status: 'Inactive'},
   { id: 'user007', fullName: 'Liam Harper', username: 'liam.harper@example.com', password: 'password123', role: 'patient', status: 'Active' },
   { id: 'user008', fullName: 'Olivia Bennett', username: 'olivia.bennett@example.com', password: 'password123', role: 'patient', status: 'Active' },
   { id: 'user009', fullName: 'Noah Foster', username: 'noah.foster@example.com', password: 'password123', role: 'patient', status: 'Inactive' },
@@ -55,3 +56,4 @@ export function saveManagedUsers(users: User[]): void {
     localStorage.setItem(MANAGED_USERS_STORAGE_KEY, JSON.stringify(users));
   }
 }
+

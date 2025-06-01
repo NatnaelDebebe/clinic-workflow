@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useForm, type SubmitHandler, Controller } from "react-hook-form";
+import { useForm, type SubmitHandler, Controller, useWatch } from "react-hook-form"; // Added useWatch
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Search, UserPlus, Edit3, Trash2 } from 'lucide-react';
@@ -28,10 +28,19 @@ const UserSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
   username: z.string().email("Invalid email address").min(1, "Username/Email is required"),
   role: z.enum(userRoles, { errorMap: () => ({ message: "Role is required" }) }),
+  specialization: z.string().optional(),
   password: z.string().optional(), 
   confirmPassword: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.role === 'doctor' && (!data.specialization || data.specialization.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Specialization is required for doctors.",
+      path: ["specialization"],
+    });
+  }
 }).refine(data => {
-  if (!data.id || data.password) {
+  if (!data.id || data.password) { // New user OR existing user changing password
     return !!data.password && data.password.length >= 6;
   }
   return true; 
@@ -40,7 +49,7 @@ const UserSchema = z.object({
   path: ["password"],
 })
 .refine(data => {
-  if (data.password) {
+  if (data.password) { // If password is being set/changed
     return data.password === data.confirmPassword;
   }
   return true; 
@@ -64,16 +73,19 @@ export default function AdminUsersPage() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const { toast } = useToast();
 
-  const { register, handleSubmit, reset, setValue, control, formState: { errors } } = useForm<UserFormData>({
+  const { register, handleSubmit, reset, setValue, control, formState: { errors }, watch } = useForm<UserFormData>({ // Added watch
     resolver: zodResolver(UserSchema),
     defaultValues: {
         fullName: '',
         username: '',
         role: undefined,
+        specialization: '',
         password: '',
         confirmPassword: ''
     }
   });
+
+  const watchedRole = watch("role"); // Watch the role field
 
   useEffect(() => {
     setUsers(getManagedUsers());
@@ -85,10 +97,11 @@ export default function AdminUsersPage() {
       setValue("fullName", editingUser.fullName);
       setValue("username", editingUser.username);
       setValue("role", editingUser.role);
+      setValue("specialization", editingUser.specialization || '');
       setValue("password", ""); 
       setValue("confirmPassword", "");
     } else {
-      reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
+      reset({ id: undefined, fullName: '', username: '', role: undefined, specialization: '', password: '', confirmPassword: '' });
     }
   }, [editingUser, setValue, reset]);
 
@@ -106,7 +119,7 @@ export default function AdminUsersPage() {
 
   const openCreateForm = () => {
     setEditingUser(null);
-    reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
+    reset({ id: undefined, fullName: '', username: '', role: undefined, specialization: '', password: '', confirmPassword: '' });
     setIsFormOpen(true);
   };
 
@@ -117,8 +130,27 @@ export default function AdminUsersPage() {
 
  const onSubmit: SubmitHandler<UserFormData> = (data) => {
     let updatedUsers;
+    const userDataToSave: Partial<User> = {
+      fullName: data.fullName,
+      username: data.username,
+      role: data.role,
+      status: editingUser ? editingUser.status : 'Active', // Preserve status on edit, default to Active for new
+    };
+
+    if (data.role === 'doctor') {
+      userDataToSave.specialization = data.specialization;
+    } else {
+      userDataToSave.specialization = undefined; // Clear specialization if not a doctor
+    }
+
+    if (data.password) {
+      userDataToSave.password = data.password;
+    }
+
     if (editingUser) {
-      updatedUsers = users.map(u => u.id === editingUser.id ? { ...u, ...data, password: data.password || u.password } : u);
+      updatedUsers = users.map(u => 
+        u.id === editingUser.id ? { ...u, ...userDataToSave, password: data.password || u.password } : u
+      );
       toast({ title: "User Updated", description: `${data.fullName} has been updated.` });
     } else {
       if (!data.password) { 
@@ -126,18 +158,18 @@ export default function AdminUsersPage() {
         return;
       }
       const newUser: User = {
-        ...data,
+        ...userDataToSave,
         id: (Math.random() + 1).toString(36).substring(7), 
         status: 'Active', 
-        password: data.password, 
-      };
+        password: data.password, // Already checked it exists
+      } as User; // Cast to User as all required fields are now present
       updatedUsers = [...users, newUser];
       toast({ title: "User Created", description: `${newUser.fullName} has been added.` });
     }
     setUsers(updatedUsers);
     saveManagedUsers(updatedUsers);
     setIsFormOpen(false);
-    reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' });
+    reset({ id: undefined, fullName: '', username: '', role: undefined, specialization: '', password: '', confirmPassword: '' });
   };
 
 
@@ -192,13 +224,13 @@ export default function AdminUsersPage() {
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as UserRole | 'all')} className="mb-6">
         <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
-          {(['all', ...userRoles] as const).map(role => (
+          {(['all', ...userRoles.filter(r => r !== 'patient')] as const).map(role => ( // Exclude 'patient' from tabs if not needed
             <TabsTrigger
               key={role}
               value={role}
               className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em] capitalize"
             >
-              {role === 'all' ? 'All Users' : role.replace('_', ' ')}
+              {role === 'all' ? 'All Staff' : role.replace('_', ' ')}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -224,12 +256,13 @@ export default function AdminUsersPage() {
                   <TableHead className="text-foreground font-medium">Full Name</TableHead>
                   <TableHead className="text-foreground font-medium">Username/Email</TableHead>
                   <TableHead className="text-foreground font-medium">Role</TableHead>
+                  <TableHead className="text-foreground font-medium">Specialization</TableHead>
                   <TableHead className="text-foreground font-medium">Status</TableHead>
                   <TableHead className="text-foreground font-medium text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {filteredUsers.filter(u => u.role !== 'patient').map((user) => ( // Exclude patients from this table view
                   <TableRow key={user.id}>
                     <TableCell className="font-medium text-foreground">{user.fullName}</TableCell>
                     <TableCell className="text-muted-foreground">{user.username}</TableCell>
@@ -238,6 +271,7 @@ export default function AdminUsersPage() {
                         {user.role.replace('_', ' ')}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{user.role === 'doctor' ? user.specialization : 'N/A'}</TableCell>
                     <TableCell>
                       <Badge variant={user.status === 'Active' ? 'default' : 'secondary'} className={user.status === 'Active' ? 'bg-green-500/20 text-green-700' : 'bg-red-500/20 text-red-700'}>
                         {user.status}
@@ -257,9 +291,9 @@ export default function AdminUsersPage() {
                 ))}
               </TableBody>
             </Table>
-            {filteredUsers.length === 0 && (
+            {filteredUsers.filter(u => u.role !== 'patient').length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
-                    No users found.
+                    No staff users found for this filter.
                 </div>
             )}
           </Card>
@@ -270,7 +304,7 @@ export default function AdminUsersPage() {
         setIsFormOpen(isOpen);
         if (!isOpen) {
           setEditingUser(null); 
-          reset({ id: undefined, fullName: '', username: '', role: undefined, password: '', confirmPassword: '' }); 
+          reset({ id: undefined, fullName: '', username: '', role: undefined, specialization: '', password: '', confirmPassword: '' }); 
         }
       }}>
         <DialogContent className="sm:max-w-[425px] bg-card">
@@ -283,29 +317,33 @@ export default function AdminUsersPage() {
                 Full Name
               </Label>
               <Input id="fullName" {...register("fullName")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" />
-              {errors.fullName && <p className="col-span-4 text-sm text-destructive text-right">{errors.fullName.message}</p>}
             </div>
+            {errors.fullName && <p className="col-start-2 col-span-3 text-sm text-destructive text-left -mt-2 mb-2">{errors.fullName.message}</p>}
+            
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="username" className="text-right text-muted-foreground">
                 Email
               </Label>
               <Input id="username" {...register("username")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" />
-              {errors.username && <p className="col-span-4 text-sm text-destructive text-right">{errors.username.message}</p>}
             </div>
-             <div className="grid grid-cols-4 items-center gap-4">
+            {errors.username && <p className="col-start-2 col-span-3 text-sm text-destructive text-left -mt-2 mb-2">{errors.username.message}</p>}
+            
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="password" className="text-right text-muted-foreground">
                 Password
               </Label>
               <Input id="password" type="password" {...register("password")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" placeholder={editingUser ? "Leave blank to keep current" : ""}/>
-              {errors.password && <p className="col-span-4 text-sm text-destructive text-right">{errors.password.message}</p>}
             </div>
+            {errors.password && <p className="col-start-2 col-span-3 text-sm text-destructive text-left -mt-2 mb-2">{errors.password.message}</p>}
+
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="confirmPassword" className="text-right text-muted-foreground">
                 Confirm Password
               </Label>
               <Input id="confirmPassword" type="password" {...register("confirmPassword")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" />
-              {errors.confirmPassword && <p className="col-span-4 text-sm text-destructive text-right">{errors.confirmPassword.message}</p>}
             </div>
+            {errors.confirmPassword && <p className="col-start-2 col-span-3 text-sm text-destructive text-left -mt-2 mb-2">{errors.confirmPassword.message}</p>}
+            
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="role" className="text-right text-muted-foreground">
                 Role
@@ -319,7 +357,7 @@ export default function AdminUsersPage() {
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover text-popover-foreground">
-                      {userRoles.map(role => (
+                      {userRoles.filter(r => r !== 'patient').map(role => ( // Exclude 'patient' from selectable roles
                         <SelectItem key={role} value={role} className="capitalize hover:bg-accent focus:bg-accent">
                           {role.replace('_', ' ')}
                         </SelectItem>
@@ -328,8 +366,21 @@ export default function AdminUsersPage() {
                   </Select>
                 )}
               />
-              {errors.role && <p className="col-span-4 text-sm text-destructive text-right">{errors.role.message}</p>}
             </div>
+            {errors.role && <p className="col-start-2 col-span-3 text-sm text-destructive text-left -mt-2 mb-2">{errors.role.message}</p>}
+
+            {watchedRole === 'doctor' && (
+              <>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="specialization" className="text-right text-muted-foreground">
+                    Specialization
+                  </Label>
+                  <Input id="specialization" {...register("specialization")} className="col-span-3 bg-background border-input text-foreground placeholder:text-muted-foreground" />
+                </div>
+                {errors.specialization && <p className="col-start-2 col-span-3 text-sm text-destructive text-left -mt-2 mb-2">{errors.specialization.message}</p>}
+              </>
+            )}
+            
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="outline">Cancel</Button>
@@ -357,3 +408,4 @@ export default function AdminUsersPage() {
     </div>
   );
 }
+
