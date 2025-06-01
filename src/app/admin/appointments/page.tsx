@@ -87,12 +87,12 @@ const AppointmentTable = ({ appointments, onActionClick }: { appointments: Appoi
       <TableBody>
         {appointments.map((appointment) => (
           <TableRow key={appointment.id}>
-            <TableCell className="text-muted-foreground">{format(parseISO(appointment.appointmentDate), 'MMM dd, yyyy')}</TableCell>
+            <TableCell className="text-muted-foreground">{isValid(parseISO(appointment.appointmentDate)) ? format(parseISO(appointment.appointmentDate), 'MMM dd, yyyy') : 'Invalid Date'}</TableCell>
             <TableCell className="text-muted-foreground">{appointment.appointmentTime}</TableCell>
             <TableCell className="font-medium text-foreground">{appointment.patientName}</TableCell>
             <TableCell className="text-muted-foreground">{appointment.doctorName}</TableCell>
             <TableCell>
-              <Badge 
+              <Badge
                 variant={getStatusVariant(appointment.status) as any}
                 className={cn(getStatusClassName(appointment.status))}
               >
@@ -125,11 +125,11 @@ export default function AdminAppointmentsPage() {
   const pathname = usePathname();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<{ id: string; fullName: string; role: UserRole; username: string; } | null>(null);
-  
+
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState("upcoming");
-  
+
   const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
   const [patientsForForm, setPatientsForForm] = useState<Patient[]>([]);
   const [doctorsForForm, setDoctorsForForm] = useState<DoctorForForm[]>([]);
@@ -138,48 +138,69 @@ export default function AdminAppointmentsPage() {
     resolver: zodResolver(AppointmentSchema),
   });
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('loggedInUser');
+      if (!storedUser) {
+        router.push('/'); // No user stored, redirect to login
+        return;
+      }
+
+      try {
+        const userData = JSON.parse(storedUser) as { id: string; fullName: string; role: UserRole; username: string; };
+
+        if (!userData || !userData.id || !userData.role) {
+          console.error("Invalid user data structure in localStorage (missing id or role) on /admin/appointments page.");
+          localStorage.removeItem('loggedInUser'); // Clear invalid user data
+          router.push('/'); // Redirect to login
+          return;
+        }
+
+        // User data is preliminarily valid (has id and role)
+        // Now check role-based access for this specific page
+        if (!['admin', 'receptionist', 'doctor'].includes(userData.role)) {
+          toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page." });
+          router.push('/admin'); // Redirect to a general admin page, not login
+          return;
+        }
+
+        // If all checks pass, set the current user
+        setCurrentUser(userData);
+
+        // Setup form data - can be done once currentUser is confirmed for the page
+        setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
+        setDoctorsForForm(
+          getManagedUsers()
+            .filter(u => u.role === 'doctor' && u.status === 'Active')
+            .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
+        );
+
+      } catch (e) {
+        console.error("Error parsing current user on /admin/appointments", e);
+        localStorage.removeItem('loggedInUser'); // Clear stored item on error
+        router.push('/'); // Redirect to login on parsing error
+      }
+    }
+  }, [router, toast, pathname]);
+
+
   const fetchAppointments = useCallback(() => {
     if (!currentUser || !currentUser.id) {
-        setAllAppointments([]); // Clear appointments if no user or user.id
+        setAllAppointments([]);
         return;
     }
     let appointments = getManagedAppointments();
     if (currentUser.role === 'doctor') {
       appointments = appointments.filter(apt => apt.doctorId === currentUser.id);
     }
-    setAllAppointments(appointments.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    // Ensure dates are valid before sorting, or provide a fallback
+    setAllAppointments(appointments.sort((a,b) => {
+        const dateA = parseISO(a.createdAt);
+        const dateB = parseISO(b.createdAt);
+        if (!isValid(dateA) || !isValid(dateB)) return 0; // or handle error appropriately
+        return dateB.getTime() - dateA.getTime();
+    }));
   }, [currentUser]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedUser = localStorage.getItem('loggedInUser');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser) as { id: string; fullName: string; role: UserRole; username: string; };
-          if (userData && userData.id && userData.role) {
-            setCurrentUser(userData);
-            if (!['admin', 'receptionist', 'doctor'].includes(userData.role)) {
-              toast({ variant: "destructive", title: "Access Denied", description: "You do not have permission to view this page."});
-              router.push('/admin');
-            }
-          } else {
-            console.error("Invalid user data structure in localStorage on /admin/appointments page.");
-            localStorage.removeItem('loggedInUser');
-            router.push('/');
-          }
-        } catch (e) { console.error("Error parsing current user on /admin/appointments", e); router.push('/'); }
-      } else {
-        router.push('/');
-      }
-    }
-    
-    setPatientsForForm(getManagedPatients().filter(p => p.status === 'Active'));
-    setDoctorsForForm(
-      getManagedUsers()
-        .filter(u => u.role === 'doctor' && u.status === 'Active')
-        .map(d => ({ id: d.id, fullName: d.fullName, specialization: d.specialization }))
-    );
-  }, [router, toast, pathname]);
 
   useEffect(() => {
     if (currentUser) {
@@ -202,30 +223,40 @@ export default function AdminAppointmentsPage() {
   };
 
   const filterAndCategorizeAppointments = (appointments: Appointment[]) => {
-    const filtered = appointments.filter(apt => 
+    const filtered = appointments.filter(apt =>
       apt.patientName.toLowerCase().includes(searchTerm) ||
       apt.doctorName.toLowerCase().includes(searchTerm) ||
       apt.status.toLowerCase().includes(searchTerm)
     );
 
     const today = new Date();
-    today.setHours(0,0,0,0); 
+    today.setHours(0,0,0,0);
 
     const upcoming = filtered.filter(apt => {
         const aptDate = parseISO(apt.appointmentDate);
         return isValid(aptDate) && isFuture(aptDate);
-    }).sort((a,b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime() || a.appointmentTime.localeCompare(b.appointmentTime));
+    }).sort((a,b) => {
+        const dateA = parseISO(a.appointmentDate);
+        const dateB = parseISO(b.appointmentDate);
+        if(!isValid(dateA) || !isValid(dateB)) return 0;
+        return dateA.getTime() - dateB.getTime() || a.appointmentTime.localeCompare(b.appointmentTime)
+    });
 
     const todays = filtered.filter(apt => {
         const aptDate = parseISO(apt.appointmentDate);
         return isValid(aptDate) && isToday(aptDate);
     }).sort((a,b) => a.appointmentTime.localeCompare(b.appointmentTime));
-    
+
     const past = filtered.filter(apt => {
         const aptDate = parseISO(apt.appointmentDate);
         return isValid(aptDate) && isPast(aptDate) && !isToday(aptDate);
-    }).sort((a,b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime() || b.appointmentTime.localeCompare(a.appointmentTime));
-    
+    }).sort((a,b) => {
+        const dateA = parseISO(a.appointmentDate);
+        const dateB = parseISO(b.appointmentDate);
+        if(!isValid(dateA) || !isValid(dateB)) return 0;
+        return dateB.getTime() - dateA.getTime() || b.appointmentTime.localeCompare(a.appointmentTime)
+    });
+
     return { upcoming, todays, past };
   };
 
@@ -290,26 +321,26 @@ export default function AdminAppointmentsPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
         <TabsList className="border-b border-border px-0 bg-transparent w-full justify-start rounded-none">
-          <TabsTrigger 
-            value="upcoming" 
+          <TabsTrigger
+            value="upcoming"
             className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
           >
             Upcoming
           </TabsTrigger>
-          <TabsTrigger 
-            value="today" 
+          <TabsTrigger
+            value="today"
             className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
           >
             Today
           </TabsTrigger>
-          <TabsTrigger 
-            value="past" 
+          <TabsTrigger
+            value="past"
             className="pb-3 pt-4 px-4 data-[state=active]:border-b-2 data-[state=active]:border-foreground data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground data-[state=active]:shadow-none rounded-none text-sm font-bold tracking-[0.015em]"
           >
             Past
           </TabsTrigger>
         </TabsList>
-        
+
         <div className="mt-6 mb-6">
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -388,7 +419,7 @@ export default function AdminAppointmentsPage() {
               />
               {errors.doctorId && <p className="text-sm text-destructive mt-1">{errors.doctorId.message}</p>}
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <Label htmlFor="appointmentDate" className="text-muted-foreground">Date</Label>
@@ -414,7 +445,7 @@ export default function AdminAppointmentsPage() {
                                 mode="single"
                                 selected={field.value}
                                 onSelect={field.onChange}
-                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) } 
+                                disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) }
                                 initialFocus
                             />
                             </PopoverContent>
@@ -425,11 +456,11 @@ export default function AdminAppointmentsPage() {
                 </div>
                 <div>
                     <Label htmlFor="appointmentTime" className="text-muted-foreground">Time (HH:MM)</Label>
-                    <Input 
-                        id="appointmentTime" 
-                        type="time" 
-                        {...register("appointmentTime")} 
-                        className="mt-1 bg-background border-input text-foreground placeholder:text-muted-foreground" 
+                    <Input
+                        id="appointmentTime"
+                        type="time"
+                        {...register("appointmentTime")}
+                        className="mt-1 bg-background border-input text-foreground placeholder:text-muted-foreground"
                     />
                     {errors.appointmentTime && <p className="text-sm text-destructive mt-1">{errors.appointmentTime.message}</p>}
                 </div>
@@ -452,3 +483,4 @@ export default function AdminAppointmentsPage() {
     </div>
   );
 }
+
