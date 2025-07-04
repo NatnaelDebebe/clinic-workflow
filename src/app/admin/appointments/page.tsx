@@ -1,7 +1,11 @@
-export default function AppointmentsPage() {
-  return (
-    <div>
-      <h1>Appointments Page</h1>
-    </div>
-  );
-}
+// src/app/admin/my-appointments/page.tsx
+   import React from 'react';
+
+   function MyAppointmentsPage() {
+     // ... page logic
+     return (
+       {/* ... JSX ... */}
+     );
+   }
+
+   export default MyAppointmentsPage;
