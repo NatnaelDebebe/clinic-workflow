@@ -1,2 +1,7 @@
-// This file is intentionally left blank after removal of appointment functionality.
-// You can delete this file.
+export default function AppointmentsPage() {
+  return (
+    <div>
+      <h1>Appointments Page</h1>
+    </div>
+  );
+}
